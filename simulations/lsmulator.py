@@ -93,9 +93,9 @@ def lsmulate(n_queries=100000, cache_size=50, layer_size=100, zipf_param=1.5):
     else:
       lsm_tree.put(key)
       all_entries.add(key)
-  return lsm_tree
+  return lsm_tree, all_entries
 
 if __name__ == '__main__':
-  tree = lsmulate()
+  tree, all_entries = lsmulate()
   pdb.set_trace()
   pass
