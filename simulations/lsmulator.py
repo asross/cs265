@@ -57,10 +57,16 @@ class SimulatedLayer(SimulatedComponent):
 
   def merge_down(self):
     # if we can't accept all the new entries, then merge existing entries to the next layer
-      if self.next_layer is None: # creating it if it does not exist
-        self.next_layer = SimulatedLayer(self.size * self.ratio, self.ratio)
-      self.next_layer.merge(self.entries)
-      self.entries = []
+    if self.next_layer is None: # creating it if it does not exist
+      self.next_layer = SimulatedLayer(self.size * self.ratio, self.ratio)
+    self.next_layer.merge(self.entries)
+    self.entries = []
+
+  def self_and_children(self):
+    if self.next_layer is None:
+      return [self]
+    else:
+      return [self] + self.next_layer.self_and_children()
 
 class LSMulator():
   def __init__(self, cache_size=50, layer_size=100):
@@ -71,29 +77,22 @@ class LSMulator():
     self.layer.put(key)
 
   def get(self, key):
-    if self.cache.get(key):
-      return
-    self.layer.get(key)
+    return True if self.cache.get(key) else self.layer.get(key)
 
   def layers(self):
-    layer = self.layer
-    layers = [layer]
-    while layer.next_layer:
-      layer = layer.next_layer
-      layers.append(layer)
-    return layers
+    return self.layer.self_and_children()
 
-def lsmulate(n_queries=100000, cache_size=50, layer_size=100, zipf_param=1.5):
-  queries = np.random.zipf(zipf_param, n_queries)
-  lsm_tree = LSMulator(cache_size=cache_size, layer_size=layer_size)
-  all_entries = set()
+def lsmulate(n_queries=100000, cache_size=50, layer_size=100, query_generator=lambda n: np.random.zipf(1.5, n)):
+  queries = query_generator(n_queries)
+  lsmtree = LSMulator(cache_size=cache_size, layer_size=layer_size)
+  entries = set()
   for key in queries:
-    if key in all_entries:
-      lsm_tree.get(key)
+    if key in entries:
+      lsmtree.get(key)
     else:
-      lsm_tree.put(key)
-      all_entries.add(key)
-  return lsm_tree, all_entries
+      lsmtree.put(key)
+      entries.add(key)
+  return lsmtree, entries
 
 if __name__ == '__main__':
   tree, all_entries = lsmulate()
