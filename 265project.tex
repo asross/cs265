@@ -71,6 +71,24 @@ Expected cost of read = $r_{hf} * E[C_{hf}] + r_{lf} * E[C_{lf}]$ \\ \\
 We can also define $r_{lf}$ in terms of $r_{hf}$ as $r_{hf} - 1$ and  $d_{lf}$ in terms of $d_{hf}$ as $d_{hf} - 1$ . (Doing this will make the effect that moving these parameters in one direction or the other has more obvious in the total overall formula.)
 \section{Bloom Filters}
 
+For a Bloom filter of $k$ bits with $h$ independent hash functions $h_1, h_2,...h_h$, the probability that a given bit is still set to 0 after inserting $n$ keys is 
+$$
+(1 - \frac{1}{k})^{n*h}
+$$
+Then the probability of a false positive is 
+$$
+(1- (1 - \frac{1}{k})^{n*h})^h \approx (1 - e^{-hn/k})^h
+$$
+
+We can minimize this over $h$ to find the optimal number of hash functions, which is $h = \mathrm{ln}(2) * \frac{k}{n}$. Assuming that this is the number of hash functions $h$ we will use, the probability of a false positive as a function of the number of bits is then 
+$$
+(1 - e^{-\mathrm{ln}(2)*k/n*n/k})^{\mathrm{ln}(2) * \frac{k}{n}} = (\frac{1}{2}) ^ {\mathrm{ln}(2) * \frac{k}{n}} \approx (.6185) ^  {\frac{k}{n}}
+$$
+
+For an item in any any level $L_i$ of the LSM tree with $i \geq 2$ we can reduce the expected cost of accessing that item from $i$ by the number of Bloom filter negatives at any level $j<i$. \\ 
+Then the expected cost of accessing an item at $L_i =  \sum_{j=1}^i p(fp_j) * 1 + 1$ \\
+Where $p(fp_j)$ is the probability of a false positive for that key at level $j$ and 1 is the cost of actually accessing the item at level $i$ assuming fence pointers that lead us to the correct page.
+
 \section{Variable Cache Size}
  
 \end{document}
