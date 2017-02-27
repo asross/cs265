@@ -122,9 +122,8 @@ class LSMulator():
   def layers(self):
     return self.top_layer.self_and_children()
 
-def lsmulate(n_queries=100000, cache_size=50, layer_size=100, query_generator=lambda n: np.random.zipf(1.5, n)):
-  queries = query_generator(n_queries)
-  lsmtree = LSMulator(cache_size=cache_size, layer_size=layer_size)
+def lsmulate(queries, **kwargs):
+  lsmtree = LSMulator(**kwargs)
   entries = set()
   for key in queries:
     if key in entries:
@@ -132,9 +131,10 @@ def lsmulate(n_queries=100000, cache_size=50, layer_size=100, query_generator=la
     else:
       lsmtree.put(key)
       entries.add(key)
-  return lsmtree, entries
+  return lsmtree
 
 if __name__ == '__main__':
-  tree, all_entries = lsmulate()
+  queries = np.random.zipf(1.5, 100000)
+  lsmtree = lsmulate(queries)
   pdb.set_trace()
   pass
