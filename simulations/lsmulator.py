@@ -36,31 +36,21 @@ class SimulatedBloomFilter():
     self.reset()
 
   def reset(self):
-    self.entries = []
-    self.collisions = defaultdict(lambda: defaultdict(lambda: None))
+    self.entries = set()
+    self.hashes = defaultdict(self.random_hash_evaluation)
+
+  def random_hash_evaluation(self):
+    return ''.join(str(np.random.choice(self.bit_length)) for _ in range(self.hash_count))
 
   @property
   def size(self):
     return self.bit_length * self.hash_count
 
-  @property
-  def missprob(self):
-    return (1./self.bit_length)**self.hash_count
-
   def put(self, key):
-    self.entries.append(key)
-
-  def false_positive(self, k1):
-    for k2 in self.entries:
-      if self.collisions[k2][k1] is None: self.collisions[k2][k1] = (np.random.random() < self.missprob)
-      if self.collisions[k2][k1]: return True
-    return False
+    self.entries.add(self.hashes[key])
 
   def get(self, key):
-    if key in self.entries:
-      return True
-    else:
-      return self.false_positive(key)
+    return self.hashes[key] in self.entries
 
 class SimulatedLayer(SimulatedComponent):
   def __init__(self, size, ratio=2, bloom_bit_length=10, bloom_hash_count=4):
@@ -86,7 +76,7 @@ class SimulatedLayer(SimulatedComponent):
       self.hits[key] += 1
       return True
     else:
-      if self.bloom_filter.false_positive(key):
+      if self.bloom_filter.get(key):
         self.misses[key] += 1
       if self.next_layer is None:
         return False
