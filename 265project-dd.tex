@@ -29,31 +29,28 @@
 
 \section{Project Description}
 
-The goal of the project is to explore optimal allocations of a given amount of memory to cache, memtable, and bloom filters for different workloads in an LSM-tree.
+The goal of the project is to determine optimal allocations of a given amount of memory to cache, memtable, and bloom filters for different workloads in an LSM-tree. To explore this, we develop both mathematical models and simulations that demonstrate the cache/memtable/bloom filter size tradeoffs under a variety of workload distributions. These models and simulations can be used to predict the probability distribution of disk accesses and determine optimal memory allocations that minimize its expected number (or some other metric of the disk access distribution that better corresponds to robustness). Finally, we want to verify the correctness of our models and simulations by testing against RocksDB, and see if we can implement an adaptive optimization scheme that finds the best RocksDB configuration for a query distribution we may not even know beforehand.
 
-To explore this, we first consider models that show the cache/memtable/bloom filter tradeoffs. We additionally have implemented a cache hit/cache miss simulation in Python for different workloads that we believe demonstrates what behavior we can expect in a variety of situations.
+Success in this project would be being able to find optimal memory allocations for specific query distributions and showing an improvement in results from an adaptive memory system as compared to standard RocksDB benchmarks.
 
-In particular, we expect that for workloads with random accesses for read spikes, the cache will be largely unhelpful and the system will likely benefit from leaving most memory as memtable and bloom filters. We expect to see similar results for bloom filter allocation as in the MONKEY example in this case.
-
-However, if some portions of the database are more likely to be read more frequently, it may make sense to enable caching or optimize the bloom filters for these items.
-
-Success in this project would be being able to quantify the workloads under which specific memory allocations are preferable and showing an improvement in results from an adaptive memory system as compared to standard RocksDB benchmarks.
-%1) Projects should have a complete set of design documents for all phases that detail algorithms, implementation plans, benchmarks, expectations, and metrics of success.
-%2) Each project should have reached implementation maturity to be able to study at least one optimization and present at least one interesting performance analysis (with graphs and explained by models).
-%3) A 10 minute presentation that describes the design and the early results and a 2 page report that focuses primarily on the analysis and results (Reports should be in the ACM SIGMOD format using Latex).
 \section{Modeling}
-Modeling equations are presented in our paper.
+
+Initial modeling results and future directions are laid out in our midway check-in paper.
 
 \section{Implementation Plans}
-We first implemented a Python simulation to calculate expected cache hits and cache misses for various memory configurations and various workloads. We have delineated a variety of representative query distributions and hope to be able to predict what the optimal memory allocations are for each of these types using results from our modeling and simulations. We will then attempt to test our hypotheses in RocksDB and see if the results confirm our analysis. 
+
+We first implemented a Python simulation to calculate expected disk accesses and component-by-component statistics for various memory configurations and workloads. We have delineated a variety of representative query distributions and hope to be able to predict what the optimal memory allocations are for each of these types using results from our modeling and simulations. We will then attempt to test our hypotheses in RocksDB and see if the results confirm our analysis.
 
 \section{Benchmarks}
-As in the MONKEY paper, we hope to be able to show that we can calculate memory allocations for which RocksDB will perform significantly faster than under its default settings and quantify these performance gains. 
+
+As in the MONKEY paper, we hope to be able to show that we can calculate memory allocations for which RocksDB will perform significantly faster than under its default settings and quantify these performance gains.
 
 \section{Expectations}
+
 We hope to be able to determine characteristics of query distributions that we can map to optimal memory allocations for those distributions.
 
 \section{Metrics of Success}
+
 Success in this project would be to generate RocksDB results which are significantly better than the results under default settings and to achieve results that make sense across modeling, simulation, and testing phases.
 
 \end{document}
