@@ -112,6 +112,9 @@ class LSMulator():
   def layers(self):
     return self.top_layer.self_and_children()
 
+  def disk_accesses(self):
+    return sum(l.total_accesses() for l in self.layers()[1:])
+
 def lsmulate(queries, **kwargs):
   lsmtree = LSMulator(**kwargs)
   entries = set()
