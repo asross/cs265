@@ -1,0 +1,59 @@
+   
+\documentclass[11pt]{article}
+\renewcommand{\baselinestretch}{1.05}
+\usepackage{amsmath,amsthm,verbatim,amssymb,amsfonts,amscd, graphicx}
+\usepackage{graphics}
+\topmargin0.0cm
+\headheight0.0cm
+\headsep0.0cm
+\oddsidemargin0.0cm
+\textheight23.0cm
+\textwidth16.5cm
+\footskip1.0cm
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem*{surfacecor}{Corollary 1}
+\newtheorem{conjecture}{Conjecture} 
+\newtheorem{question}{Question} 
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+
+ \begin{document}
+
+\title{CS265 Design Document}
+\author{Mali Akmanalp, Sophie Hilgard, Andrew Ross}
+\maketitle
+
+\section{Project Description}
+
+The goal of the project is to explore optimal allocations of a given amount of memory to cache, memtable, and bloom filters for different workloads in an LSM-tree.
+
+To explore this, we first consider models that show the cache/memtable/bloom filter tradeoffs. We additionally have implemented a cache hit/cache miss simulation in Python for different workloads that we believe demonstrates what behavior we can expect in a variety of situations.
+
+In particular, we expect that for workloads with random accesses for read spikes, the cache will be largely unhelpful and the system will likely benefit from leaving most memory as memtable and bloom filters. We expect to see similar results for bloom filter allocation as in the MONKEY example in this case.
+
+However, if some portions of the database are more likely to be read more frequently, it may make sense to enable caching or optimize the bloom filters for these items.
+
+Success in this project would be being able to quantify the workloads under which specific memory allocations are preferable and showing an improvement in results from an adaptive memory system as compared to standard RocksDB benchmarks.
+%1) Projects should have a complete set of design documents for all phases that detail algorithms, implementation plans, benchmarks, expectations, and metrics of success.
+%2) Each project should have reached implementation maturity to be able to study at least one optimization and present at least one interesting performance analysis (with graphs and explained by models).
+%3) A 10 minute presentation that describes the design and the early results and a 2 page report that focuses primarily on the analysis and results (Reports should be in the ACM SIGMOD format using Latex).
+\section{Modeling}
+Modeling equations are presented in our paper.
+
+\section{Implementation Plans}
+We first implemented a Python simulation to calculate expected cache hits and cache misses for various memory configurations and various workloads. We have delineated a variety of representative query distributions and hope to be able to predict what the optimal memory allocations are for each of these types using results from our modeling and simulations. We will then attempt to test our hypotheses in RocksDB and see if the results confirm our analysis. 
+
+\section{Benchmarks}
+As in the MONKEY paper, we hope to be able to show that we can calculate memory allocations for which RocksDB will perform significantly faster than under its default settings and quantify these performance gains. 
+
+\section{Expectations}
+We hope to be able to determine characteristics of query distributions that we can map to optimal memory allocations for those distributions.
+
+\section{Metrics of Success}
+Success in this project would be to generate RocksDB results which are significantly better than the results under default settings and to achieve results that make sense across modeling, simulation, and testing phases.
+
+\end{document}
