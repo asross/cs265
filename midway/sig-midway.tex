@@ -182,25 +182,34 @@ $$= \sum_{i=1}^j \frac{n_m * R^i - \frac{n_m * R^i}{n_m * \frac{1-(R^j-1)}{1-R}}
 
 \subsection{Skewed Reads (80-20)}
 
-Now consider the case for skewed reads, where we say $d_{hf}$ ($d_{lf}$) percent of the data receives $r_{hf}$ ($r_{lf}$) percent of the reads (where $d_{hf} + d_{lf} = 1$ and $r_{hf} + r_{lf} = 1$). On average, we can assume that the cache contains $r_{hf} * n_c$ items from $d_{hf} * n_t$ and $r_{lf} * n_c$ items from $d_{lf} * n$. Then the expected cost of a read is dependent on whether the data item being read is in $d_{hf} * n_t$ or $d_{lf} * n$ as the probability of a cache hit varies.\\ \\
-Concretely, consider where we have 3 levels and 800 total items with a cache of size 10 and a ratio of 2  (for L0=100, L1 = 200, L2 = 400 items), with $d_{hf} = .2$ and $d_{lf} = .8$ and $r_{hf}$ = .8 and $r_{lf}$ = .2. Then the cache on average contains 8 items from $d_{hf} * n$ and 2 items from $d_{lf}*n$. If we execute a read on one of the 200 items in $d_{hf}$, then, there is a $\frac{8}{200}$ chance that that item is in the cache. If we execute a read on one of the $200*\frac{1}{4} = 50$ items of  $d_{hf} * n_t$ in L1, we expect that $\frac{2}{6} * 8$ of those items would have actually been found already in cache, as this level contains $\frac{2}{6}$ of all of the items not in the memtable. Then the probability that a read is found in L1 is the proportion of the $d_{hf} * n_t = 160$ items that will reside in L1 but not in the cache, which is $\frac{40 - \frac{2}{6} * 8}{160}$. \\ \\
-For data in $d_{hf} * n$, \\ \\
-Probability that read is in memtable:
-$$\frac{n_m*d_{hf}}{d_{hf} *n_t}  = p(\text{MT}_{hf})$$\\
-Probability that read is in cache:
-$$\frac{r_{hf} * n_c}{d_{hf} * n_t} = p(\text{cache}_{hf})$$ \\
-Probability that read is in $L_i$ but not in cache:
-$$ \frac{n_m * R^{i}*d_{hf} - \frac{n_m * R^{i}}{n_m * \frac{1-(R^j-1)}{1-R}} * r_{hf} * n_c}{d_{hf} * n_t}  = p(Li_{hf})$$ \\
-Expected cost of read on item in $d_{hf}$:
-$$E[C_{hf}]= p(\text{MT}_{hf}) * 0  + p(\text{cache}_{hf}) * 0 + \sum_{i=1}^j p(Li_{hf}) * i$$
-$$ = \sum_{i=1}^j \frac{n_m * R^{i}*d_{hf} - \frac{n_m * R^{i}}{n_m * \frac{1-(R^j-1)}{1-R}} * r_{hf} * n_c}{d_{hf} * n_t}  * i$$
+Now consider the case for skewed reads, where we say $d_{hf}$ ($d_{lf}$) percent of the data ($hf \equiv$ high-frequency) receives $r_{hf}$ ($r_{lf}$) percent of the reads (where $d_{hf} + d_{lf} = 1$ and $r_{hf} + r_{lf} = 1$). On average, we can assume that the cache contains $r_{hf} * n_c$ items from $d_{hf} * n_t$ and $r_{lf} * n_c$ items from $d_{lf} * n$. Then the expected cost of a read is dependent on whether the data item being read is in $d_{hf} * n_t$ or $d_{lf} * n$ as the probability of a cache hit varies.\\ \\
+Concretely, consider where we have 3 levels and 800 total items with a cache of size 10 and a ratio of 2  (for L0=100, L1 = 200, L2 = 400 items), with $d_{hf} = .2$ and $d_{lf} = .8$ and $r_{hf}$ = .8 and $r_{lf}$ = .2, which matches the scenario considered in \cite{monkey}. Then the cache, on average, contains 8 items from $d_{hf} * n$ and 2 items from $d_{lf}*n$. If we execute a read on one of the 200 items in $d_{hf}$, then, there is a $\frac{8}{200}$ chance that that item is in the cache. If we execute a read on one of the $200*\frac{1}{4} = 50$ items of  $d_{hf} * n_t$ in L1, we expect that $\frac{2}{6} * 8$ of those items would have actually been found already in cache, as this level contains $\frac{2}{6}$ of all of the items not in the memtable. Then the probability that a read is found in L1 is the proportion of the $d_{hf} * n_t = 160$ items that will reside in L1 but not in the cache, which is $\frac{40 - \frac{2}{6} * 8}{160}$. \\ \\
+Just limiting ourselves to high-frequency data, we see that:
+\begin{itemize}
+  \item Probability that read is in memtable $= p(\text{MT}_{hf}) = \frac{n_m*d_{hf}}{d_{hf} *n_t}$
+  \item Probability that read is in cache $= p(\text{cache}_{hf}) = \frac{r_{hf} * n_c}{d_{hf} * n_t}$
+  \item Probability that read is in $L_i$ but not in cache $= p(L_{i,hf})$ $$ = \frac{n_m * R^{i}*d_{hf} - \frac{n_m * R^{i}}{n_m * \frac{1-(R^j-1)}{1-R}} * r_{hf} * n_c}{d_{hf} * n_t} $$
+\end{itemize}
 
-The expected cost of a read on an item in $d_{lf}$ can be enumerated analogously, and we combine the expectation of reads in $d_{hf}$ and $d_{lf}$ as: \\
-Expected cost of read = $r_{hf} * E[C_{hf}] + r_{lf} * E[C_{lf}]$ \\ \\
-%We can also define $r_{lf}$ in terms of $r_{hf}$ as $r_{hf} - 1$ and  $d_{lf}$ in terms of $d_{hf}$ as $d_{hf} - 1$ . (Doing this will make the effect that moving these parameters in one direction or the other has more obvious in the total overall formula.)
+This gives us the final expected cost of reading high frequency items:
+$$
+\begin{aligned}
+E[C_{\text{skewed}, hf}]
+& = p(\text{MT}_{hf}) * 0  + p(\text{cache}_{hf}) * 0 + \sum_{i=1}^j p(Li_{hf}) i \\
+& = \sum_{i=1}^j \frac{n_m * R^{i}*d_{hf} - \frac{n_m * R^{i}}{n_m * \frac{1-(R^j-1)}{1-R}} r_{hf} n_c}{d_{hf} n_t} i
+\end{aligned}
+$$
+
+The expected cost of reads for low-frequency items can be enumerated analogously, and combining the expectation of reads in $d_{hf}$ and $d_{lf}$, we obtain
+$$
+E[C_{\text{skewed}}] = r_{hf} * E[C_{\text{skewed}, hf}] + r_{lf} * E[C_{\text{skewed}, lf}],
+$$
+
+which is the expected number of lower layer accesses per read on a workload where $d_{hf}$ percent of the data receives $r_{hf}$ of the reads.
+
 \subsection{Bloom Filters}
 
-For a Bloom filter of $k$ bits with $h$ independent hash functions $h_1, h_2,...h_h$, the probability that a given bit is still set to 0 after inserting $n$ keys is 
+The previous analysis hasn't yet accounted for the presence of Bloom filters, which reduce the likelihood we will unnecessarily access a lower layer. For a Bloom filter of $k$ bits with $h$ independent hash functions $h_1, h_2,...h_h$, the probability that a given bit is still set to 0 after inserting $n$ keys is 
 $$
 (1 - \frac{1}{k})^{n*h}
 $$
@@ -218,8 +227,9 @@ For an item in any any level $L_i$ of the LSM tree with $i \geq 2$ we can reduce
 Then the expected cost of accessing an item at $L_i$ is  $$\sum_{j=1}^{i-1} p(fp_j) * 1 + 1$$
 Where $p(fp_j)$ is the probability of a false positive for that key at level $j$ and 1 is the cost of actually accessing the item at level $i$ assuming fence pointers that lead us to the correct page.
 
-\subsection{Variable Cache Size, Constant Number of Layers}
-To analyze a variable cache/memtable allocation with a given memory size $n_v$, we first consider the simplification of assuming a constant layer structure. Of course, in general a larger memtable will allow for larger layers, affecting both read and write performance. Let $n_l$ be the size of the first layer when $n_v = n_m$ (all memtable) and $n_c =n_v - n_m$.\\ \\
+\subsection{Variable Cache, Constant Layers}
+
+Now we want to analyze what happens when we vary the proportion of memory allocated to the cache and the memtable. Given a fixed memory size $n_v$, we first consider the simplification of assuming a constant layer structure. Of course, in general a larger memtable will allow for larger layers, affecting both read and write performance. Let $n_l$ be the size of the first layer when $n_v = n_m$ (all memtable) and $n_c =n_v - n_m$.\\ \\
 \textbf{Uniform Case:} \\
 %if we assume some fixed base layer size $n_l$, which is the size of the memtable if it exists.
 Consider the formula used earlier:
@@ -269,14 +279,27 @@ For general memtable/cache allocation, probability that read is in $L_i$ but not
 \frac{n_l * R^{i}*d_{hf} - \frac{n_v * R^{i}}{n_l * \frac{1-(R^j-1)}{1-R}} * r_{hf} * (n_v - n_m)}{d_{hf} * n_t} \\+ \frac{\frac{n_v * R^{i}}{n_l * \frac{1-(R^j-1)}{1-R}} *d_{hf} *(n_v - n_m)}{d_{hf} * n_t}  = p(Li_{hf})
 \end{multline}
 
-\subsection{Allow Number of Layers to Vary with Memtable}
-\subsection{Bloom Filter Allocation}
+\subsection{Future Modeling Work}
 
-\subsection{Adaptive Updates in RocksDB}
+What we have done so far is to analytically compute basic quantities (like the
+expected cost of individual reads) as a function of LSM tree attributes for
+basic query distributions. Once we extend this analysis to allow the number of
+layers to vary with the memtable size, we should be able to directly compare
+these analytic results to simulation and experimental benchmarks, and then
+finally attempt to derive optimal LSM tree parameters.
 
-Once we have analytic and simulated predictions of optimal RocksDB configurations that match benchmarking experiments, the final step will be to consider whether we can implement adaptive updating in RocksDB to optimize performance on the fly.
+\section{Bringing it all together}
 
-\section{Conclusions}
+Once we have analytic and simulated predictions of optimal RocksDB
+configurations that match benchmarking experiments, the final step will be to
+consider whether we can implement adaptive updating in RocksDB to optimize
+performance on the fly. We are considering several options, including on-the-fly
+inference and maintaining a small number of fixed parameter settings that we can
+dynamically decide between to simplify the problem.
+
+Overall, however, we believe even being able to determine the optimal LSM tree
+architecture in theory (based on a deep and accurate characterization of the
+workload) will be a useful contribution.
 
 \bibliographystyle{abbrv}
 \small
