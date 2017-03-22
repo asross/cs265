@@ -735,7 +735,7 @@
  \let\maketitle\relax
  \let\@maketitle\relax
  \gdef\@thanks{}\gdef\@author{}\gdef\@title{}\gdef\@subtitle{}\let\thanks\relax
- \@copyrightspace}
+ }
 
 %% CHANGES ON NEXT LINES
 \newif\if@ll % to record which version of LaTeX is in use
@@ -1632,12 +1632,10 @@
 % ISBN
 %
 \def\isbn#1{\global\acmcopyr={#1}}
-\isbn{978-1-4503-2138-9}
 
 \RequirePackage{url}
 \urlstyle{rm}
 \def\doi#1{\def\@doi{#1}}
-\doi{10.1145/1235}
 \def\printdoi#1{\url{#1}}
 
 
@@ -1651,33 +1649,6 @@
 
 
 
-\newtoks\copyrightetc
-\ifnum\ACM@basesize=9\relax
-\global\copyrightetc{%
-{\noindent\confname\ \the\conf\ \the\confinfo}\par\smallskip
-  \if@printcopyright
-    \copyright\ \the\copyrtyr\ \@copyrightowner
-  \fi
-  \if@acmowned ISBN \else\ifnum\acm@copyrightmode=2 ISBN \else \par\smallskip ACM ISBN \fi\fi
- \the\acmcopyr\ifx\@acmPrice\@empty.\else\dots\@acmPrice\fi\par\smallskip
-{DOI: \small\expandafter\printdoi\expandafter{\@doi}}} 
-\toappear{\fontsize{7pt}{8pt}\fontfamily{ptm}\selectfont
-  \the\boilerplate\par\smallskip
- \the\copyrightetc}
-\fi
-\ifnum\ACM@basesize=10\relax
-\global\copyrightetc{%
-{\noindent\confname\ \the\conf\ \the\confinfo}\par\smallskip
-  \if@printcopyright
-    \copyright\ \the\copyrtyr\ \@copyrightowner
-  \fi
-  \if@acmowned ISBN \else\ifnum\acm@copyrightmode=2 ISBN \else \par\smallskip ACM ISBN \fi\fi
- \the\acmcopyr\ifx\@acmPrice\@empty.\else\dots\@acmPrice\fi\par\smallskip
-{DOI: \small\expandafter\printdoi\expandafter{\@doi}}} 
-\toappear{\fontsize{7.5pt}{8.5pt}\fontfamily{ptm}\selectfont
-  \the\boilerplate\par\smallskip
- \the\copyrightetc}
-\fi
 %\DeclareFixedFont{\altcrnotice}{OT1}{tmr}{m}{n}{8}  % << patch needed for accenting e.g. Montreal - Gerry, May 2007
 %\DeclareFixedFont{\altconfname}{OT1}{tmr}{m}{it}{8}  % << patch needed for accenting in italicized confname - Gerry, May 2007
 %
