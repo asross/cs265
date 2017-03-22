@@ -25,13 +25,13 @@ A. Sophie Hilgard\\
 \section{Introduction}
 Tuning data systems is hard. Even for systems like key-value stores that only
 support the most minimal API (\texttt{put} and \texttt{get}), the possibilities
-are often overwhelming. The developers of RocksDB \cite{facebook:rocksdb}, a popular
-and powerful key-value store, freely admit \cite{rocksdb-tuning-guide} that
-``configuring RocksDB optimally is not trivial,'' and that ``even [they] as
-RocksDB developers don't fully understand the effect of each configuration
-change.'' Configurations must be optimized with respect to a given
-\textit{workload}, which is rarely known in advance, although it is sometimes
-roughly characterizable. There has been recent work \cite{monkey} in
+are often overwhelming. The developers of RocksDB \cite{facebook:rocksdb}, a
+popular and powerful key-value store, freely admit that ``configuring RocksDB
+optimally is not trivial,'' and that ``even [they] as RocksDB developers don't
+fully understand the effect of each configuration change''
+\cite{rocksdb-tuning-guide}. Configurations must be optimized with respect to a
+given \textit{workload}, which is rarely known in advance, although it is
+sometimes roughly characterizable. There has been recent work \cite{monkey} in
 determining the optimal memory allocation for bloom filters in terms of
 worst-case analysis and with respect to a number of basic workloads, but
 realistic key-value store workloads, which have been analyzed e.g. for Facebook
@@ -136,39 +136,39 @@ optimization.}
 \end{figure}
 
 \section{Modeling}
-\subsection{Uniform}
-Assume \\
-$n_t$ items in total DB \\
-$n_c$ items that fit in cache\\
-$n_m$ items that fit in memtable\\
-$R$ ratio between layers of LSM tree such that \\
-$L1 = R * n_m$ \\
-$L2 = R^2 * n_m \dots$ \\ 
 
-We can solve for $j$ the total number of layers required to store all the data: \\
-$$n_m * \frac{1-R^j}{1-R} = n_t$$
-$$j = \frac{log(1-n_t*\frac{1-R}{n_m})}{log R}$$
+Ideally, instead of resorting to simulation, we should be able to analytically compute the expected cost (in disk reads) of reading an element from our LSM tree. The following sections show some of our initial results under different assumptions about the query distribution. By the end of this project, we hope to show concordance between these results, simulations, and experiments with RocksDB.
+
+\subsection{Uniform query distribution}
+
+\noindent Assuming we have
+\begin{itemize}
+  \item $n_t$ total items in the database
+  \item $n_c$ items that fit in cache
+  \item $n_m$ items that fit in memtable
+  \item a ratio $R$ between layers of LSM tree such that
+  \item $L1 = R * n_m$, $L2 = R^2 * n_m$, and so on,
+\end{itemize}
+
+\noindent then we can solve for $j$, the total number of layers required to store all the data: \\
+$$n_t = n_m * \frac{1-R^j}{1-R},\  j = \frac{\log(1-n_t*\frac{1-R}{n_m})}{\log R}$$
 
 The average cost of a write remains the same as for the basic LSM tree case:
 $$
-\textrm{log}_{R} \frac{n_t}{n_m}
+\text{write cost} = \textrm{log}_{R} \frac{n_t}{n_m}
 $$
 
-The average cost of a read, we consider probabilistically over all possible locations of the read item, assuming a random distribution of reads: \\
-Probability that read is in memtable:
-$$\frac{n_m}{n_t}  = p(mt)$$\\
-Probability that read is in cache:
-$$\frac{n_c}{n_t} = p(cache)$$ \\
-Probability that read is in L1 but not in cache
-$$ \frac{n_m * R - \frac{n_m * R}{n_m * \frac{1-(R^j-1)}{1-R}} * n_c}{n_t}  = p(L1)$$\\
-Where the numerator is the number of items that are in the first layer $$n_m * R$$ minus the proportion of items from that layer that are probabilistically in the cache already $$\frac{n_m * R}{n_m * \frac{1-(R^j-1)}{1-R}} * n_c$$
-Probability that read is in $L_i$ generally but not in cache
-$$ \frac{n_m * R^i - \frac{n_m * R^i}{n_m * \frac{1-(R^j-1)}{1-R}} * n_c}{n_t}  = p(L_i)$$\\
-%Where the numerator is the number of items that are in the first layer $$n_m * R$$ minus the proportion of items from that layer that are probabilistically in the cache already $$\frac{n_m * R}{n_m * \frac{1-(R^j-1)}{1-R}} * n_c$$
-Where here the $R^j -1$ comes from the fact that items already in memtable (L0) are not allowed to occupy the cache.
+The average cost of a read must be considered probabilistically over all possible locations of the read item, in this case assuming a uniformly random distribution of reads:
+\begin{itemize}
+\item Probability that read is in memtable $= p(\text{MT}) = \frac{n_m}{n_t}$
+\item Probability that read is in cache $= p(\text{cache}) = \frac{n_c}{n_t}$
+\item Probability that read is in L1 but not in cache $= p(L1)$ $$= \frac{n_m * R - \frac{n_m * R}{n_m * \frac{1-(R^j-1)}{1-R}} * n_c}{n_t}$$
+\end{itemize}
+where the numerator is the number of items $n_m * R$ that are in the first layer minus the proportion of items from that layer that are probabilistically in the cache already: $$\frac{n_m * R}{n_m * \frac{1-(R^j-1)}{1-R}} * n_c$$
+and finally where the $R^j -1$ comes from the fact that items already in memtable (L0) are not allowed to occupy the cache.
 
-Expected cost of read:
-$$E[C] = p(mt) * 0  + p(cache) * 0 + \sum_{i=1}^j p(L_i) * i$$
+Therefore, given a uniform query distribution, the full expected cost in disk reads of a read is
+$$E[C_{\text{uniform}}] = p(\text{MT}) * 0  + p(\text{cache}) * 0 + \sum_{i=1}^j p(L_i) * i$$
 $$= \sum_{i=1}^j \frac{n_m * R^i - \frac{n_m * R^i}{n_m * \frac{1-(R^j-1)}{1-R}} * n_c}{n_t}  * i$$
 
 \subsection{Skewed Reads (80-20)}
@@ -177,13 +177,13 @@ Now consider the case for skewed reads, where we say $d_{hf}$ ($d_{lf}$) percent
 Concretely, consider where we have 3 levels and 800 total items with a cache of size 10 and a ratio of 2  (for L0=100, L1 = 200, L2 = 400 items), with $d_{hf} = .2$ and $d_{lf} = .8$ and $r_{hf}$ = .8 and $r_{lf}$ = .2. Then the cache on average contains 8 items from $d_{hf} * n$ and 2 items from $d_{lf}*n$. If we execute a read on one of the 200 items in $d_{hf}$, then, there is a $\frac{8}{200}$ chance that that item is in the cache. If we execute a read on one of the $200*\frac{1}{4} = 50$ items of  $d_{hf} * n_t$ in L1, we expect that $\frac{2}{6} * 8$ of those items would have actually been found already in cache, as this level contains $\frac{2}{6}$ of all of the items not in the memtable. Then the probability that a read is found in L1 is the proportion of the $d_{hf} * n_t = 160$ items that will reside in L1 but not in the cache, which is $\frac{40 - \frac{2}{6} * 8}{160}$. \\ \\
 For data in $d_{hf} * n$, \\ \\
 Probability that read is in memtable:
-$$\frac{n_m*d_{hf}}{d_{hf} *n_t}  = p(mt_{hf})$$\\
+$$\frac{n_m*d_{hf}}{d_{hf} *n_t}  = p(\text{MT}_{hf})$$\\
 Probability that read is in cache:
-$$\frac{r_{hf} * n_c}{d_{hf} * n_t} = p(cache_{hf})$$ \\
+$$\frac{r_{hf} * n_c}{d_{hf} * n_t} = p(\text{cache}_{hf})$$ \\
 Probability that read is in $L_i$ but not in cache:
 $$ \frac{n_m * R^{i}*d_{hf} - \frac{n_m * R^{i}}{n_m * \frac{1-(R^j-1)}{1-R}} * r_{hf} * n_c}{d_{hf} * n_t}  = p(Li_{hf})$$ \\
 Expected cost of read on item in $d_{hf}$:
-$$E[C_{hf}]= p(mt_{hf}) * 0  + p(cache_{hf}) * 0 + \sum_{i=1}^j p(Li_{hf}) * i$$
+$$E[C_{hf}]= p(\text{MT}_{hf}) * 0  + p(\text{cache}_{hf}) * 0 + \sum_{i=1}^j p(Li_{hf}) * i$$
 $$ = \sum_{i=1}^j \frac{n_m * R^{i}*d_{hf} - \frac{n_m * R^{i}}{n_m * \frac{1-(R^j-1)}{1-R}} * r_{hf} * n_c}{d_{hf} * n_t}  * i$$
 
 The expected cost of a read on an item in $d_{lf}$ can be enumerated analogously, and we combine the expectation of reads in $d_{hf}$ and $d_{lf}$ as: \\
@@ -215,7 +215,7 @@ To analyze a variable cache/memtable allocation with a given memory size $n_v$, 
 %if we assume some fixed base layer size $n_l$, which is the size of the memtable if it exists.
 Consider the formula used earlier:
 $$
-p(mt) * 0  + p(cache) * 0 + \sum_{i=1}^j p(L_i) * i 
+p(\text{MT}) * 0  + p(\text{cache}) * 0 + \sum_{i=1}^j p(L_i) * i 
 $$
 
 In the extreme case where $n_m=0$ (\textbf{no memtable}), the formula in the numerator of the sum simplifies to be over $n$ the total number of items, as there is no memtable layer and the probability of the first layer now has a cost of 1. However, we now have to add a number of items to each level of the tree that sum to the amount that were in L0. We add them as a geometric series per layer to maintain the structure
@@ -244,13 +244,13 @@ In the extreme case of \textbf{no cache}, the result will be as above. \\ \\
 In the extreme case of \textbf{no memtable}, the expected cost of a read is dependent on whether the data item being read is in $d_{hf} * n_t$ or $d_{lf} * n$ as the probability of a cache hit varies.\\
 For data in $d_{hf} * n$, \\ \\
 Probability that read is in cache:
-$$\frac{r_{hf} * n_c}{d_{hf} * n_t} = p(cache_{hf})$$ \\
+$$\frac{r_{hf} * n_c}{d_{hf} * n_t} = p(\text{cache}_{hf})$$ \\
 Probability that read is in $L_i$ but not in cache: 
 \begin{multline}
 \frac{n_l * R^{i}*d_{hf} - \frac{n_l * R^{i}}{n_t} * r_{hf} * (n_v)}{d_{hf} * n_t} \\+ \frac{\frac{n_l * R^{i}}{n_t} *d_{hf} *(n_v)}{d_{hf} * n_t}  \\= \frac{n_l * R^{i}*d_{hf}+ \frac{n_l * R^{i}}{n_t} * (d_{hf}-r_{hf})* n_v}{d_{hf} * n_t} = p(Li_{hf}) 
 \end{multline} \\
 Expected cost of read on item in $d_{hf}$: \\
-$$E[C_{hf}]= p(cache_{hf}) * 0 + \sum_{i=1}^j p(Li_{hf}) * i$$\\
+$$E[C_{hf}]= p(\text{cache}_{hf}) * 0 + \sum_{i=1}^j p(Li_{hf}) * i$$\\
 $$
 = \sum_{i=1}^j \frac{n_l * R^{i}*d_{hf}+ \frac{n_l * R^{i}}{n_t} * (d_{hf}-r_{hf})* n_v}{d_{hf} * n_t}  * i
 $$ \\
