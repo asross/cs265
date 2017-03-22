@@ -135,6 +135,15 @@ optimization.}
 \label{fig:sameqs-difftree}
 \end{figure}
 
+\section{Benchmarking}
+
+So far, we've succeeded in getting basic benchmarks for RocksDB running and
+identifying which configuration parameters to vary. Our next step will be
+to generate queries in RocksDB format that correspond to our probabilistically
+modeled workloads, run them against RocksDB under different configurations
+that correspond to simulation parameters, and see if results match at least
+qualitatively.
+
 \section{Modeling}
 
 Ideally, instead of resorting to simulation, we should be able to analytically compute the expected cost (in disk reads) of reading an element from our LSM tree. The following sections show some of our initial results under different assumptions about the query distribution. By the end of this project, we hope to show concordance between these results, simulations, and experiments with RocksDB.
@@ -259,14 +268,13 @@ For general memtable/cache allocation, probability that read is in $L_i$ but not
 \begin{multline}
 \frac{n_l * R^{i}*d_{hf} - \frac{n_v * R^{i}}{n_l * \frac{1-(R^j-1)}{1-R}} * r_{hf} * (n_v - n_m)}{d_{hf} * n_t} \\+ \frac{\frac{n_v * R^{i}}{n_l * \frac{1-(R^j-1)}{1-R}} *d_{hf} *(n_v - n_m)}{d_{hf} * n_t}  = p(Li_{hf})
 \end{multline}
-%table showing expected effect of change in difft variables
+
 \subsection{Allow Number of Layers to Vary with Memtable}
 \subsection{Bloom Filter Allocation}
 
-\section{Benchmarking}
+\subsection{Adaptive Updates in RocksDB}
 
-So far, we've succeeded in getting basic benchmarks for RocksDB running and
-identifying which configuration parameters to vary.
+Once we have analytic and simulated predictions of optimal RocksDB configurations that match benchmarking experiments, the final step will be to consider whether we can implement adaptive updating in RocksDB to optimize performance on the fly.
 
 \section{Conclusions}
 
