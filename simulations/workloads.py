@@ -60,17 +60,15 @@ class UniformWorkload(MultinomialWorkload):
   def __str__(self):
     return 'UniformWorkload'
 
-class TimeDecayBetaMultWorkload():
+class DiscoverDecayWorkload():
   def __init__(self, n_queries=25000,
       discoveries=scipy.stats.poisson(3),
       popularity=scipy.stats.beta(2,2),
-      decay_rate=scipy.stats.beta(100,1),
-      time_inter=scipy.stats.expon(0.25)):
+      decay_rate=scipy.stats.beta(100,1)):
     self.n = n_queries
     self.discoveries = discoveries
     self.popularity = popularity
     self.decay_rate = decay_rate
-    self.time_inter = time_inter
 
   def sample(self, pops):
     p = np.array(pops)
@@ -78,8 +76,8 @@ class TimeDecayBetaMultWorkload():
     return np.random.choice(len(p), p=p, size=10)
 
   def __str__(self):
-    return 'TimeDecayBetaMultWorkload(\nnew={},pop={},\ndecay={},dt={})'.format(
-        *[distr(d) for d in [self.discoveries,self.popularity,self.decay_rate,self.time_inter]])
+    return 'DiscoverDecay(\nnew keys~{},\npopularity~{},\ndecayrate~{})'.format(
+        *[distr(d) for d in [self.discoveries,self.popularity,self.decay_rate]])
 
   @cacheprop
   def queries(self):
@@ -93,6 +91,5 @@ class TimeDecayBetaMultWorkload():
       if len(populs) > 0:
         for el in self.sample(populs):
           queries.append(el)
-        dt = self.time_inter.rvs()
-        populs = [populs[i] * decays[i]**dt for i in range(len(populs))]
+        populs = [populs[i] * decays[i] for i in range(len(populs))]
     return np.array(queries)
