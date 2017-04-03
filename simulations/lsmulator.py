@@ -18,6 +18,8 @@ class LSMComponent():
 
 class Cache(LSMComponent):
   def get(self, key):
+    if self.size == 0: return False
+
     if key in self.entries:
       self.hits[key] += 1
       result = True
