@@ -32,13 +32,13 @@ class Cache(LSMComponent):
     return result
 
 class Layer(LSMComponent):
-  def __init__(self, size, ratio=2, index=0, bsize=lambda idx: (100, 10)):
+  def __init__(self, size, ratio=2, index=0, bsize=100):
     super(Layer, self).__init__(size)
     self.child = None
     self.ratio = ratio
     self.index = index
     self.bsize = bsize
-    self.bloom = BloomFilter(*bsize(index)) if index else None
+    self.bloom = BloomFilter(size, bsize, index) if index else None
 
   def put(self, key):
     if self.is_full():
@@ -85,9 +85,13 @@ class Layer(LSMComponent):
     return layers
 
 class BloomFilter():
-  def __init__(self, bit_length=100, hash_count=10):
-    self.bit_length = bit_length
-    self.hash_count = hash_count
+  def __init__(self, size, bit_length=100, index=0):
+    if callable(bit_length):
+      bit_length = bit_length(index)
+
+    self.layer_size = size # n
+    self.bit_length = bit_length # m
+    self.hash_count = int(np.ceil((bit_length / size) * np.log(2))) # k
     self.reset()
 
   def reset(self):
@@ -95,20 +99,20 @@ class BloomFilter():
     self.hashes = defaultdict(self.random_hash_eval)
 
   def random_hash_eval(self):
-    return ''.join(str(np.random.choice(self.bit_length)) for _ in range(self.hash_count))
+    return tuple(np.random.choice(self.bit_length) for _ in range(self.hash_count))
+
+  def put(self, key):
+    self.entries.update(self.hashes[key])
+
+  def get(self, key):
+    return self.entries.issuperset(self.hashes[key])
 
   @property
   def size(self):
     return self.bit_length * self.hash_count
 
-  def put(self, key):
-    self.entries.add(self.hashes[key])
-
-  def get(self, key):
-    return self.hashes[key] in self.entries
-
 class LSMulator():
-  def __init__(self, cache_size=50, layer_size=100, layer_ratio=2, bloom_size=lambda idx: (100, 10)):
+  def __init__(self, cache_size=50, layer_size=100, layer_ratio=2, bloom_size=100):
     self.cache = Cache(cache_size)
     self.memtbl = Layer(layer_size, ratio=layer_ratio, bsize=bloom_size, index=0)
 
