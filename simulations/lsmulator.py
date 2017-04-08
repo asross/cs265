@@ -88,7 +88,8 @@ class BloomFilter():
   def __init__(self, size, bit_length=100, index=0):
     if callable(bit_length):
       bit_length = bit_length(index)
-
+    elif isinstance(bit_length, (list, tuple, np.ndarray)):
+      bit_length = bit_length[index-1]
     self.layer_size = size # n
     self.bit_length = bit_length # m
     self.hash_count = int(np.ceil((bit_length / size) * np.log(2))) # k
@@ -125,11 +126,17 @@ class LSMulator():
     else:
       return self.memtbl.get(key)
 
+  @property
+  def layer_sizes(self):
+    return [l.size for l in self.layers]
+
+  @property
   def layers(self):
     return self.memtbl.children()
 
+  @property
   def disk_accesses(self):
-    return sum(l.total_accesses() for l in self.layers())
+    return sum(l.total_accesses() for l in self.layers)
 
 def lsmulate(queries, **kwargs):
   lsmtree = LSMulator(**kwargs)
