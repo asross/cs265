@@ -1,29 +1,23 @@
 import numpy as np
 import scipy.stats
+from helpers import *
 
-def distr(dist):
-  return '{}{}'.format(dist.dist.name, dist.args)
+class Workload():
+  pass
 
-class cacheprop(object):
-  def __init__(self, getter): self.getter = getter
-  def __get__(self, actual_self, _):
-    value = self.getter(actual_self)
-    actual_self.__dict__[self.getter.__name__] = value
-    return value
-
-class RoundRobinWorkload():
+class RoundRobinWorkload(Workload):
   def __init__(self, n_queries=25000, k_classes=2500):
     self.n = n_queries
     self.k = k_classes
 
   @cacheprop
   def queries(self):
-    return np.array([q % self.k for q in range(self.n)])
+    return readwritify([q % self.k for q in range(self.n)])
 
-  def __str__(self):
+  def __repr__(self):
     return 'RoundRobinWorkload'
 
-class ZipfWorkload():
+class ZipfWorkload(Workload):
   def __init__(self, n_queries=25000, zipf_param=1.1):
     assert(zipf_param > 1)
     self.n = n_queries
@@ -31,12 +25,12 @@ class ZipfWorkload():
 
   @cacheprop
   def queries(self):
-    return np.random.zipf(self.z, self.n)
+    return readwritify(np.random.zipf(self.z, self.n))
 
-  def __str__(self):
+  def __repr__(self):
     return 'ZipfWorkload({})'.format(self.z)
 
-class MultinomialWorkload():
+class MultinomialWorkload(Workload):
   def __init__(self, n_queries=25000, k_classes=2500, dist=scipy.stats.uniform()):
     self.n = n_queries
     self.k = k_classes
@@ -46,9 +40,9 @@ class MultinomialWorkload():
   def queries(self):
     self.probs = self.dist.rvs(size=self.k)
     self.probs /= self.probs.sum()
-    return np.random.choice(self.k, size=self.n, p=self.probs)
+    return readwritify(np.random.choice(self.k, size=self.n, p=self.probs))
 
-  def __str__(self):
+  def __repr__(self):
     return 'MultinomialWorkload({})'.format(distr(self.dist))
 
 class UniformWorkload(MultinomialWorkload):
@@ -57,39 +51,54 @@ class UniformWorkload(MultinomialWorkload):
     self.k = k_classes
     self.dist = scipy.stats.uniform()
 
-  def __str__(self):
+  def __repr__(self):
     return 'UniformWorkload'
 
-class DiscoverDecayWorkload():
+class DiscoverDecayWorkload(Workload):
   def __init__(self, n_queries=25000,
-      discoveries=scipy.stats.poisson(3),
+      lookups=scipy.stats.poisson(8),
+      creates=scipy.stats.poisson(4),
+      updates=scipy.stats.poisson(2),
       popularity=scipy.stats.beta(2,2),
       decay_rate=scipy.stats.beta(100,1)):
     self.n = n_queries
-    self.discoveries = discoveries
+    self.lookups = lookups
+    self.creates = creates
+    self.updates = updates
     self.popularity = popularity
     self.decay_rate = decay_rate
 
-  def sample(self, pops):
-    p = np.array(pops)
-    p /= p.sum()
-    return np.random.choice(len(p), p=p, size=10)
+  def sample(self, pops, size):
+    return np.random.choice(len(pops), p=pops/pops.sum(), size=size)
 
-  def __str__(self):
-    return 'DiscoverDecay(\nnew keys~{},\npopularity~{},\ndecayrate~{})'.format(
-        *[distr(d) for d in [self.discoveries,self.popularity,self.decay_rate]])
+  def __repr__(self):
+    return 'DiscoverDecay(\nlookups~{},\ncreates~{},\nupdates~{},\npopularity~{},\ndecay_rate~{})'.format(
+        *[distr(d) for d in [self.lookups,self.creates,self.updates,self.popularity,self.decay_rate]])
 
   @cacheprop
   def queries(self):
     queries = []
-    populs = []
-    decays = []
+    populs = np.zeros(self.n)
+    decays = np.zeros(self.n)
+    k = 0
+
     while len(queries) < self.n:
-      for i in range(self.discoveries.rvs()):
-        populs.append(self.popularity.rvs())
-        decays.append(self.decay_rate.rvs())
-      if len(populs) > 0:
-        for el in self.sample(populs):
-          queries.append(el)
-        populs = [populs[i] * decays[i] for i in range(len(populs))]
+      # newly created keys
+      creates = self.creates.rvs()
+      populs[k:k+creates] = self.popularity.rvs(size=creates)
+      decays[k:k+creates] = self.decay_rate.rvs(size=creates)
+      for i in range(creates):
+        queries.append([k+i, 1])
+      k += creates
+
+      # reads/updates
+      lookups = self.lookups.rvs()
+      updates = self.updates.rvs()
+      keys = self.sample(populs[:k], lookups + updates)
+      for key, a in zip(keys, [0]*lookups + [1]*updates):
+        queries.append([key, a])
+
+      # update popularity
+      populs *= decays
+
     return np.array(queries)

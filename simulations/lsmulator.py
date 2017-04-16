@@ -140,17 +140,16 @@ class LSMulator():
 
 def lsmulate(queries, **kwargs):
   lsmtree = LSMulator(**kwargs)
-  entries = set()
-  for key in queries:
-    if key in entries:
-      lsmtree.get(key)
-    else:
+  for key, is_write in queries:
+    if is_write:
       lsmtree.put(key)
-      entries.add(key)
+    else:
+      lsmtree.get(key)
   return lsmtree
 
 if __name__ == '__main__':
-  queries = np.random.zipf(1.5, 100000)
+  from workloads import readwritify
+  queries = readwritify(np.random.zipf(1.5, 100000), read_fraction=0.95)
   lsmtree = lsmulate(queries)
   pdb.set_trace()
   pass
