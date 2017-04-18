@@ -21,3 +21,15 @@ def readwritify(keys, read_fraction=1):
       a = 0 if np.random.rand() < read_fraction else 1 
       queries.append([key, a])
   return np.array(queries)
+
+cycloid_t = np.linspace(0, 2*np.pi, 1000)
+cycloid_x = cycloid_t - np.sin(cycloid_t)
+cycloid_y = 1 - np.cos(cycloid_t)
+
+def _cycloid(x):
+  return cycloid_y[np.argmin(np.abs(cycloid_x - np.array([x*2*np.pi]).T), axis=1)] / 2.0
+
+cyc_mapping = _cycloid(np.arange(1000)/1000.)
+
+def cycloid(x):
+  return cyc_mapping[np.floor(x*1000).astype(int)]
