@@ -1,33 +1,52 @@
 import numpy as np
-from collections import Counter, defaultdict
 import pdb
+from collections import defaultdict
 
 class LSMComponent():
   def __init__(self, size):
-    self.hits = Counter()
-    self.misses = Counter()
+    self.hits = 0
+    self.misses = 0
     self.size = size
     self.entries = []
-  def is_full(self): return len(self.entries) == self.size
-  def free_space(self): return self.size - len(self.entries)
-  def total_hits(self): return sum(self.hits.values())
-  def total_misses(self): return sum(self.misses.values())
-  def total_accesses(self): return self.total_hits() + self.total_misses()
-  def hit_frequency(self): return self.total_hits() / float(self.total_accesses())
-  def miss_frequency(self): return self.total_misses() / float(self.total_accesses())
+
+  @property
+  def full(self):
+    return len(self.entries) == self.size
+
+  @property
+  def empty(self):
+    return len(self.entries) == 0
+
+  @property
+  def free_space(self):
+    return self.size - len(self.entries)
+
+  @property
+  def accesses(self):
+    return self.hits + self.misses
+
+  @property
+  def hit_frequency(self):
+    return self.hits / self.accesses
+
+  @property
+  def miss_frequency(self):
+    return self.misses / self.accesses
 
 class Cache(LSMComponent):
   def get(self, key):
-    if self.size == 0: return False
+    if self.size == 0:
+      return False
 
     if key in self.entries:
-      self.hits[key] += 1
+      self.hits += 1
       result = True
-      if self.is_full(): self.entries.remove(key)
+      self.entries.remove(key)
     else:
-      self.misses[key] += 1
+      self.misses += 1
       result = False
-      if self.is_full(): self.entries.remove(self.entries[-1])
+      if self.full:
+        self.entries.remove(self.entries[-1])
     self.entries.insert(0, key)
     return result
 
@@ -38,10 +57,10 @@ class Layer(LSMComponent):
     self.ratio = ratio
     self.index = index
     self.bsize = bsize
-    self.bloom = BloomFilter(size, bsize, index) if index else None
+    self.bloom = Bloom(size, bsize, index) if index else None
 
   def put(self, key):
-    if self.is_full():
+    if self.full:
       self.merge_down()
     self.entries.append(key)
     if self.bloom is not None:
@@ -49,19 +68,21 @@ class Layer(LSMComponent):
 
   def merge(self, entries):
     assert(len(entries) <= self.size)
-    if len(entries) > self.free_space(): self.merge_down()
+    if len(entries) > self.free_space:
+      self.merge_down()
     self.entries += entries
+    self.entries = list(set(self.entries))
     if self.bloom is not None:
       for key in entries:
         self.bloom.put(key)
 
   def get(self, key):
     if key in self.entries:
-      self.hits[key] += 1
+      self.hits += 1
       return True
     else:
       if self.bloom and self.bloom.get(key):
-        self.misses[key] += 1
+        self.misses += 1
       if self.child is None:
         return False
       else:
@@ -84,33 +105,40 @@ class Layer(LSMComponent):
       layer = layer.child
     return layers
 
-class BloomFilter():
-  def __init__(self, size, bit_length=100, index=0):
+class Bloom(LSMComponent):
+  def __init__(self, size, bit_length=100, index=0, int_width=32):
+    super(Bloom, self).__init__(size)
     if callable(bit_length):
       bit_length = bit_length(index)
     elif isinstance(bit_length, (list, tuple, np.ndarray)):
       bit_length = bit_length[index-1]
-    self.layer_size = size # n
+    bit_length *= int_width # to account for integer size
     self.bit_length = bit_length # m
     self.hash_count = int(np.ceil((bit_length / size) * np.log(2))) # k
     self.reset()
 
   def reset(self):
-    self.entries = set()
-    self.hashes = defaultdict(self.random_hash_eval)
+    self.hashes = set()
+    self.hash_for = defaultdict(self.random_hash_eval)
 
   def random_hash_eval(self):
     return tuple(np.random.choice(self.bit_length) for _ in range(self.hash_count))
 
   def put(self, key):
-    self.entries.update(self.hashes[key])
+    self.entries.append(key)
+    self.hashes.update(self.hash_for[key])
 
   def get(self, key):
-    return self.entries.issuperset(self.hashes[key])
+    result = self.hashes.issuperset(self.hash_for[key])
+    if result and key in self.entries:
+      self.misses += 1
+    else:
+      self.hits += 1
+    return result
 
   @property
-  def size(self):
-    return self.bit_length * self.hash_count
+  def false_positive_rate(self):
+    return self.miss_frequency
 
 class LSMulator():
   def __init__(self, cache_size=50, layer_size=100, layer_ratio=2, bloom_size=100):

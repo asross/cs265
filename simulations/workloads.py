@@ -72,7 +72,7 @@ class DiscoverDecayWorkload(Workload):
     return np.random.choice(len(pops), p=pops/pops.sum(), size=size)
 
   def __repr__(self):
-    return 'DiscoverDecay(lookups~{},\ncreates~{},updates~{},\npopularity~{},decay_rate~{})'.format(
+    return 'DiscoverDecay(\nlookups~{},\ncreates~{},\nupdates~{},\npopularity~{},\ndecay_rate~{})'.format(
         *[distr(d) for d in [self.lookups,self.creates,self.updates,self.popularity,self.decay_rate]])
 
   @cacheprop
@@ -126,7 +126,7 @@ class PeriodicDecayWorkload(Workload):
     return np.random.choice(len(pops), p=pops/pops.sum(), size=size)
 
   def __repr__(self):
-    return 'PeriodicDecay(lookups~{},\ncreates~{},updates~{},\npopularity~{},decay_rate~{}\nperiod={},cuspiness={})'.format(
+    return 'PeriodicDecay(\nlookups~{},\ncreates~{},\nupdates~{},\npopularity~{},\ndecay_rate~{}\nperiod,cuspity={},{})'.format(
         *([distr(d) for d in [self.lookups,self.creates,self.updates,self.popularity,self.decay_rate]]+[self.period,self.cuspiness]))
 
   @cacheprop
