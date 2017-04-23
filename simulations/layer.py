@@ -11,23 +11,26 @@ class Layer(LSMComponent):
     self.bsize = bsize
     self.bloom = Bloom(size, bsize, index) if index else None
     self.mergedowns = 0
+    if index > 0:
+      self.entries = set()
 
   def put(self, key):
     if self.full:
       self.merge_down()
-    self.entries.append(key)
-    if self.bloom is not None:
+
+    if self.index:
+      self.entries.add(key)
       self.bloom.put(key)
+    else:
+      self.entries.append(key)
 
   def merge(self, entries):
     assert(len(entries) <= self.size)
     if len(entries) > self.free_space:
       self.merge_down()
-    self.entries += entries
-    self.entries = list(set(self.entries))
-    if self.bloom is not None:
-      for key in entries:
-        self.bloom.put(key)
+    self.entries.update(entries)
+    for key in entries:
+      self.bloom.put(key)
 
   def get(self, key):
     if key in self.entries:
@@ -47,9 +50,11 @@ class Layer(LSMComponent):
     if self.child is None: # creating it if it does not exist
       self.child = Layer(self.size*self.ratio, self.ratio, bsize=self.bsize, index=self.index+1)
     self.child.merge(self.entries)
-    self.entries = []
     if self.bloom:
+      self.entries = set()
       self.bloom.reset()
+    else:
+      self.entries = []
 
   def children(self):
     layers = []
@@ -89,8 +94,8 @@ if __name__ == '__main__':
   assert(layer.child.child.bloom is not None)
 
   assert(layer.entries == [96, 97, 98, 99])
-  assert(layer.child.entries == list(range(64, 96)))
-  assert(layer.child.child.entries == list(range(64)))
+  assert(layer.child.entries == set(range(64, 96)))
+  assert(layer.child.child.entries == set(range(64)))
 
   assert(layer.get(96))
   assert(layer.hits == 1)

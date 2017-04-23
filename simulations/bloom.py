@@ -14,14 +14,18 @@ class Bloom(LSMComponent):
     self.reset()
 
   def reset(self):
+    self.entries = set()
     self.hashes = set()
     self.hash_for = defaultdict(self.random_hash_eval)
 
   def random_hash_eval(self):
-    return tuple(np.random.choice(self.bit_length) for _ in range(self.hash_count))
+    if self.hash_count == 0 or self.bit_length == 0:
+      return tuple()
+
+    return tuple(np.random.choice(self.bit_length, size=self.hash_count))
 
   def put(self, key):
-    self.entries.append(key)
+    self.entries.add(key)
     self.hashes.update(self.hash_for[key])
 
   def get(self, key):

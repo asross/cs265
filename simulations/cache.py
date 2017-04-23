@@ -1,23 +1,29 @@
 from lsm_component import *
+from collections import OrderedDict
 
 class Cache(LSMComponent):
+  def __init__(self, size):
+    super(Cache, self).__init__(size)
+    self.entries = OrderedDict()
+
   def get(self, key):
     if self.size == 0:
       return False
 
     if key in self.entries:
       self.hits += 1
-      result = True
-      self.entries.remove(key)
+      self.entries.move_to_end(key)
+      return True
     else:
       self.misses += 1
-      result = False
       if self.full:
-        self.entries.remove(self.entries[-1])
+        self.entries.popitem(last=False)
+      self.entries[key] = None
+      return False
 
-    self.entries.insert(0, key)
-
-    return result
+  @property
+  def keys(self):
+    return list(reversed(self.entries.keys()))
 
 if __name__ == '__main__':
   print('running cache tests...', end=' ')
@@ -26,26 +32,26 @@ if __name__ == '__main__':
 
   # it's initially empty
   assert(cache.empty)
-  assert(cache.entries == [])
+  assert(cache.keys == [])
 
   # a get returns false, but adds the key...
   assert(not cache.get(5))
-  assert(cache.entries == [5])
+  assert(cache.keys == [5])
   assert(cache.get(5))
-  assert(cache.entries == [5])
+  assert(cache.keys == [5])
 
   # ... to the _beginning_
   assert(not cache.get(4))
-  assert(cache.entries == [4,5])
+  assert(cache.keys == [4,5])
   assert(not cache.get(3))
-  assert(cache.entries == [3,4,5])
+  assert(cache.keys == [3,4,5])
   assert(cache.get(5))
-  assert(cache.entries == [5,3,4])
+  assert(cache.keys == [5,3,4])
 
   # when the cache is full, the last key is evicted
   assert(cache.full)
   assert(not cache.get(2))
-  assert(cache.entries == [2,5,3])
+  assert(cache.keys == [2,5,3])
 
   # it keeps stats
   assert(cache.hits == 2)
