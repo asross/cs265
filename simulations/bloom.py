@@ -22,7 +22,7 @@ class Bloom(LSMComponent):
     if self.hash_count == 0 or self.bit_length == 0:
       return tuple()
 
-    return tuple(np.random.choice(self.bit_length, size=self.hash_count))
+    return tuple((np.random.uniform(size=self.hash_count)*self.bit_length).astype(int))
 
   def put(self, key):
     self.entries.add(key)
