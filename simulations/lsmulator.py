@@ -55,9 +55,11 @@ class LSMulator():
     return trees
 
   @classmethod
-  def cache_vs_bloom_vs_buf(kls, workload, total, dM=100, balloc=monkey_assignment, layer_ratio=2):
+  def cache_vs_bloom_vs_buf(kls, workload, total, dM=100, balloc=monkey_assignment, layer_ratio=2, verbose=False):
     trees = []
-    for memtbl in range(0, total, dM):
+    for memtbl in range(dM, total, dM):
+      if verbose:
+        print('Memtable =', memtbl)
       layers = LSMulator.emulate(workload.queries, memtbl_size=memtbl, layer_ratio=layer_ratio).layer_sizes
       for bloom in range(0, total - memtbl, dM):
         trees.append(LSMulator.emulate(workload.queries,
