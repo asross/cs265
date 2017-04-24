@@ -1,6 +1,8 @@
 import numpy as np
 
 def baseline_assignment(max_memory_in_keys, memtbl_key_count, layer_key_counts, bits_per_key=64):
+  if len(layer_key_counts) == 0:
+    return np.array([])
   bits = max_memory_in_keys * bits_per_key
   diff = memtbl_key_count * bits_per_key
   assignment = np.ones_like(layer_key_counts) * (bits / len(layer_key_counts))
@@ -31,6 +33,8 @@ def baseline_assignment(max_memory_in_keys, memtbl_key_count, layer_key_counts, 
   return assignment.astype(int)
 
 def monkey_assignment(max_memory_in_keys, memtbl_key_count, layer_key_counts, bits_per_key=64):
+  if len(layer_key_counts) == 0:
+    return np.array([])
   bits = max_memory_in_keys * bits_per_key
   diff = memtbl_key_count * bits_per_key
   assignment = np.ones_like(layer_key_counts) * (bits / len(layer_key_counts))
