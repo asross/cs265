@@ -27,8 +27,8 @@ class LSMComponent():
 
   @property
   def hit_frequency(self):
-    return self.hits / self.accesses
+    return self.hits / max(self.accesses, 1)
 
   @property
   def miss_frequency(self):
-    return self.misses / self.accesses
+    return self.misses / max(self.accesses, 1)
