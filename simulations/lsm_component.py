@@ -5,6 +5,10 @@ class LSMComponent():
     self.size = size
     self.entries = []
 
+  def reset_counters(self):
+    self.hits = 0
+    self.misses = 0
+
   @property
   def full(self):
     return len(self.entries) == self.size

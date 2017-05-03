@@ -59,4 +59,8 @@ if __name__ == '__main__':
   assert(cache.hit_frequency == 1/3.)
   assert(cache.miss_frequency == 2/3.)
 
+  cache.reset_counters()
+  assert(cache.hits == 0)
+  assert(cache.misses == 0)
+
   print('success!')
