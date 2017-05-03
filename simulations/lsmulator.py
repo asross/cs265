@@ -7,9 +7,10 @@ default_layer_ratio = 2
 default_memtbl_size = 100
 
 class LSMulator():
-  def __init__(self, cache_size=50, memtbl_size=default_memtbl_size, layer_ratio=default_layer_ratio, bloom_size=100):
+  def __init__(self, cache_size=50, memtbl_size=default_memtbl_size, layer_ratio=default_layer_ratio, bloom_size=100, page_size=256):
     self.cache = Cache(cache_size)
     self.memtbl = Layer(memtbl_size, ratio=layer_ratio, bsize=bloom_size, index=0)
+    self.page_size = 256
 
   def put(self, key):
     self.memtbl.put(key)
@@ -34,7 +35,7 @@ class LSMulator():
 
   @property
   def disk_accesses(self):
-    return sum(l.accesses for l in self.layers)
+    return sum(l.disk_accesses(self.page_size) for l in self.layers)
 
   @classmethod
   def emulate(kls, queries, **kwargs):

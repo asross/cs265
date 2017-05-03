@@ -10,7 +10,8 @@ class Layer(LSMComponent):
     self.index = index
     self.bsize = bsize
     self.bloom = Bloom(size, bsize, index) if index else None
-    self.mergedowns = 0
+    self.mergereads = []
+    self.mergewrites = []
     if index > 0:
       self.entries = set()
 
@@ -26,11 +27,18 @@ class Layer(LSMComponent):
 
   def merge(self, entries):
     assert(len(entries) <= self.size)
+
     if len(entries) > self.free_space:
       self.merge_down()
+
+    if len(self.entries):
+      self.mergereads.append(len(self.entries))
+
     self.entries.update(entries)
     for key in entries:
       self.bloom.put(key)
+
+    self.mergewrites.append(len(self.entries))
 
   def get(self, key):
     if key in self.entries:
@@ -44,8 +52,15 @@ class Layer(LSMComponent):
       else:
         return self.child.get(key)
 
+  def disk_accesses(self, pagesize=256):
+    total = self.accesses
+    for n_entries in self.mergereads + self.mergewrites:
+      total += int(np.ceil(n_entries / float(pagesize)))
+    return total
+
   def merge_down(self):
-    self.mergedowns += 1
+    if self.index > 0:
+      self.mergereads.append(len(self.entries))
     # if we can't accept all the new entries, then merge existing entries to the next layer
     if self.child is None: # creating it if it does not exist
       self.child = Layer(self.size*self.ratio, self.ratio, bsize=self.bsize, index=self.index+1)
@@ -85,9 +100,19 @@ if __name__ == '__main__':
     layer.put(i)
   np.testing.assert_array_equal(layer_sizes(100, 16, 2), [l.size for l in layer.children()])
 
-  assert(layer.mergedowns == 6)
-  assert(layer.child.mergedowns == 2)
-  assert(layer.child.child.mergedowns == 0)
+  assert(sum(layer.mergereads) == 0)
+  assert(layer.disk_accesses() == 0)
+
+  assert(sum(layer.child.mergereads) == 112)
+  assert(sum(layer.child.mergewrites) == 144)
+
+  assert(layer.child.disk_accesses(pagesize=16) == 16)
+  assert(layer.child.disk_accesses(pagesize=256) == 11)
+  assert(layer.child.disk_accesses(pagesize=7) == 43)
+
+  assert(sum(layer.child.child.mergereads) == 32)
+  assert(sum(layer.child.child.mergewrites) == 96)
+
   assert(layer.child.child.child == None)
 
   assert(layer.child.bloom is not None)
