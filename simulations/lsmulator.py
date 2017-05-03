@@ -20,6 +20,10 @@ class LSMulator():
     else:
       return self.memtbl.get(key)
 
+  def reset_counters(self):
+    for component in [self.cache, self.memtbl] + self.layers:
+      component.reset_counters()
+
   @property
   def layer_sizes(self):
     return np.array([l.size for l in self.layers])

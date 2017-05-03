@@ -53,12 +53,12 @@ if __name__ == '__main__':
   # we can fill it
   bf.put(5)
   assert(len(bf.hash_for) == 1)
-  assert(bf.entries == [5])
+  assert(list(bf.entries) == [5])
 
   # getting entries in the filter is fine (++hits)
   assert(bf.get(5))
   assert(len(bf.hash_for) == 1)
-  assert(bf.entries == [5])
+  assert(list(bf.entries) == [5])
   assert(bf.hits == 2)
   assert(bf.misses == 0)
 
