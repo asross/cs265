@@ -15,6 +15,13 @@ class Layer(LSMComponent):
     if index > 0:
       self.entries = set()
 
+  def reset_counters(self):
+    super(Layer, self).reset_counters()
+    self.mergereads = []
+    self.mergewrites = []
+    if self.bloom:
+      self.bloom.reset_counters()
+
   def put(self, key):
     if self.full:
       self.merge_down()

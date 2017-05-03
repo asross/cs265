@@ -16,10 +16,16 @@ class LSMulator():
     self.memtbl.put(key)
 
   def get(self, key):
-    if key not in self.memtbl.entries and self.cache.get(key):
+    if key in self.memtbl.entries:
+      self.memtbl.hits += 1
+      return True
+    elif self.cache.get(key):
       return True
     else:
-      return self.memtbl.get(key)
+      result = self.memtbl.get(key)
+      if result:
+        self.cache.put(key)
+      return result
 
   def reset_counters(self):
     for component in [self.cache, self.memtbl] + self.layers:
@@ -77,7 +83,7 @@ class LSMulator():
 if __name__ == '__main__':
   import pdb
   from workloads import readwritify
-  queries = readwritify(np.random.zipf(1.5, 100000), read_fraction=0.95)
-  lsmtree = LSMulator.emulate(queries)
+  queries = readwritify(np.random.zipf(1.5, 100000), update_fraction=0.05, null_read_fraction=0.01)
+  lsmtree = LSMulator.emulate(queries, bloom_size=4096)
   pdb.set_trace()
   pass
