@@ -16,10 +16,15 @@ class LSMulator():
     self.memtbl.put(key)
 
   def get(self, key):
-    if key in self.memtbl.entries:
+    try:
+      i = self.memtbl.entries.index(key)
       self.memtbl.hits += 1
+      self.memtbl.hit_indexes[i] += 1
       return True
-    elif self.cache.get(key):
+    except ValueError:
+      self.memtbl.misses += 1
+
+    if self.cache.get(key):
       return True
     else:
       result = self.memtbl.get(key)
