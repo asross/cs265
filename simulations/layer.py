@@ -1,6 +1,7 @@
 from lsm_component import *
 from bloom import *
 import numpy as np
+from collections import defaultdict
 
 class Layer(LSMComponent):
   def __init__(self, size, ratio=2, index=0, bsize=100):
@@ -9,11 +10,14 @@ class Layer(LSMComponent):
     self.ratio = ratio
     self.index = index
     self.bsize = bsize
-    self.bloom = Bloom(size, bsize, index) if index else None
     self.mergereads = []
     self.mergewrites = []
     if index > 0:
       self.entries = set()
+      self.bloom = Bloom(size, bsize, index)
+    else:
+      self.hit_indexes = defaultdict(int)
+      self.bloom = None
 
   def reset_counters(self):
     super(Layer, self).reset_counters()
@@ -48,16 +52,28 @@ class Layer(LSMComponent):
     self.mergewrites.append(len(self.entries))
 
   def get(self, key):
-    if key in self.entries:
-      self.hits += 1
-      return True
-    else:
-      if self.bloom is None or self.bloom.get(key):
+    if self.index == 0:
+      # MEMTABLE
+      try:
+        i = self.entries.index(key)
+        self.hits += 1
+        self.hit_indexes[i] += 1
+        return True
+      except ValueError:
         self.misses += 1
-      if self.child is None:
-        return False
-      else:
-        return self.child.get(key)
+    else:
+      # LAYER
+      if key in self.entries:
+        self.hits += 1
+        return True
+      elif self.bloom.get(key):
+        self.misses += 1
+
+    # If we didn't return, check the child
+    if self.child is None:
+      return False
+    else:
+      return self.child.get(key)
 
   def disk_accesses(self, pagesize=256):
     total = self.accesses

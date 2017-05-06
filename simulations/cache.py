@@ -1,10 +1,15 @@
 from lsm_component import *
 from collections import OrderedDict
 
+def last_slot(od):
+  for k, _ in od.items():
+    return k
+
 class Cache(LSMComponent):
   def __init__(self, size):
     super(Cache, self).__init__(size)
     self.entries = OrderedDict()
+    self.last_slot_hits = 0
 
   def get(self, key):
     if self.size == 0:
@@ -12,6 +17,7 @@ class Cache(LSMComponent):
 
     if key in self.entries:
       self.hits += 1
+      self.last_slot_hits += self.full and key == last_slot(self.entries)
       self.entries.move_to_end(key)
       return True
     else:
