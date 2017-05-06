@@ -74,6 +74,41 @@ class LSMulator():
           bloom_size=balloc(bloom, memtbl, layers)))
     return trees
 
+  @staticmethod
+  def cache_vs_bloom_vs_buf_threaded(workload, total, dM=100, balloc=monkey_assignment, layer_ratio=2, verbose=False):
+    import pathos.multiprocessing as mp
+    pool = mp.ProcessingPool(nodes=4)
+
+    def get_layer_size_wrapper(memtbl):
+      return list(LSMulator.emulate(
+        workload.queries,
+        memtbl_size=memtbl,
+        layer_ratio=layer_ratio).layer_sizes)
+
+    layer_sizes = list(pool.map(get_layer_size_wrapper, range(dM, total, dM)))
+
+    # Pre-generate jobs
+    def generate_jobs():
+      for i, memtbl in enumerate(range(dM, total, dM)):
+        layers = layer_sizes[i]
+        for bloom in range(0, total - memtbl, dM):
+          yield dict(
+              queries=workload.queries,
+              layer_ratio=layer_ratio,
+              memtbl_size=memtbl,
+              cache_size=total - memtbl - bloom,
+              bloom_size=balloc(bloom, memtbl, layers))
+
+    def wrapper(args):
+      queries = args.pop("queries")
+      return LSMulator.emulate(queries, **args)
+
+    results = pool.uimap(wrapper, generate_jobs())
+
+    return results
+
+
+
 if __name__ == '__main__':
   import pdb
   from workloads import readwritify
