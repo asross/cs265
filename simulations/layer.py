@@ -12,6 +12,7 @@ class Layer(LSMComponent):
     self.bsize = bsize
     self.mergereads = []
     self.mergewrites = []
+    self.dupes_squashed = 0
     if index > 0:
       self.entries = set()
       self.bloom = Bloom(size, bsize, index)
@@ -45,11 +46,15 @@ class Layer(LSMComponent):
     if len(self.entries):
       self.mergereads.append(len(self.entries))
 
+    pre_merge_length = len(self.entries) + len(entries)
     self.entries.update(entries)
+    post_merge_length = len(self.entries)
+
     for key in entries:
       self.bloom.put(key)
 
-    self.mergewrites.append(len(self.entries))
+    self.mergewrites.append(post_merge_length)
+    self.dupes_squashed += pre_merge_length - post_merge_length
 
   def get(self, key):
     if self.index == 0:
