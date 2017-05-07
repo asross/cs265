@@ -16,10 +16,12 @@ class Cache(LSMComponent):
       return True
     else:
       self.misses += 1
-      if self.full:
-        self.entries.popitem(last=False)
-      self.entries[key] = None
       return False
+
+  def put(self, key):
+    if self.full:
+      self.entries.popitem(last=False)
+    self.entries[key] = None
 
   @property
   def keys(self):
@@ -35,22 +37,22 @@ if __name__ == '__main__':
   assert(cache.keys == [])
 
   # a get returns false, but adds the key...
-  assert(not cache.get(5))
+  assert(not cache.get(5)); cache.put(5)
   assert(cache.keys == [5])
   assert(cache.get(5))
   assert(cache.keys == [5])
 
   # ... to the _beginning_
-  assert(not cache.get(4))
+  assert(not cache.get(4)); cache.put(4)
   assert(cache.keys == [4,5])
-  assert(not cache.get(3))
+  assert(not cache.get(3)); cache.put(3)
   assert(cache.keys == [3,4,5])
   assert(cache.get(5))
   assert(cache.keys == [5,3,4])
 
   # when the cache is full, the last key is evicted
   assert(cache.full)
-  assert(not cache.get(2))
+  assert(not cache.get(2)); cache.put(2)
   assert(cache.keys == [2,5,3])
 
   # it keeps stats

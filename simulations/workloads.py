@@ -15,50 +15,54 @@ class Workload():
     return len(creates)
 
 class RoundRobinWorkload(Workload):
-  def __init__(self, n_queries=25000, k_classes=2500):
+  def __init__(self, n_queries=25000, k_classes=2500, update_fraction=0.):
     self.n = n_queries
     self.k = k_classes
+    self.u = update_fraction
 
   @cacheprop
   def queries(self):
-    return readwritify([q % self.k for q in range(self.n)])
+    return readwritify([q % self.k for q in range(self.n)], self.u)
 
   def __repr__(self):
     return 'RoundRobinWorkload'
 
 class ZipfWorkload(Workload):
-  def __init__(self, n_queries=25000, zipf_param=1.1):
+  def __init__(self, n_queries=25000, zipf_param=1.1, update_fraction=0.):
     assert(zipf_param > 1)
     self.n = n_queries
     self.z = zipf_param
+    self.u = update_fraction
 
   @cacheprop
   def queries(self):
-    return readwritify(np.random.zipf(self.z, self.n))
+    return readwritify(np.random.zipf(self.z, self.n), self.u)
 
   def __repr__(self):
     return 'ZipfWorkload({})'.format(self.z)
 
 class MultinomialWorkload(Workload):
-  def __init__(self, n_queries=25000, k_classes=2500, dist=scipy.stats.uniform()):
+  def __init__(self, n_queries=25000, k_classes=2500, dist=scipy.stats.uniform(), update_fraction=0.):
     self.n = n_queries
     self.k = k_classes
     self.dist = dist
+    self.u = update_fraction
 
   @cacheprop
   def queries(self):
     self.probs = self.dist.rvs(size=self.k)
     self.probs /= self.probs.sum()
-    return readwritify(np.random.choice(self.k, size=self.n, p=self.probs))
+    return readwritify(np.random.choice(self.k, size=self.n, p=self.probs), self.u)
 
   def __repr__(self):
     return 'MultinomialWorkload({})'.format(distr(self.dist))
 
 class UniformWorkload(MultinomialWorkload):
-  def __init__(self, n_queries=25000, k_classes=2500):
+  def __init__(self, n_queries=25000, k_classes=2500, update_fraction=0.):
     self.n = n_queries
     self.k = k_classes
     self.dist = scipy.stats.uniform()
+    self.u = update_fraction
 
   def __repr__(self):
     return 'UniformWorkload'
@@ -176,16 +180,17 @@ class PeriodicDecayWorkload(Workload):
 def distr(dist):
   return '{}{}'.format(dist.dist.name, dist.args)
 
-def readwritify(keys, read_fraction=1):
+def readwritify(keys, update_fraction=0., null_read_fraction=0.):
   seen = set()
   queries = []
   for key in keys:
     if key not in seen:
       seen.add(key)
       queries.append([key, 1])
+    elif np.random.rand() < null_read_fraction:
+      queries.append([-1, 0])
     else:
-      a = 0 if np.random.rand() < read_fraction else 1
-      queries.append([key, a])
+      queries.append([key, int(np.random.rand() < update_fraction)])
   return np.array(queries)
 
 cycloid_t = np.linspace(0, 2*np.pi, 1000)
