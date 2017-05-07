@@ -11,17 +11,28 @@ class LSMulator():
     self.cache = Cache(cache_size)
     self.memtbl = Layer(memtbl_size, ratio=layer_ratio, bsize=bloom_size, index=0)
     self.page_size = 256
+    self.layer_queries = 0
+    self.puts = 0
+    self.gets = 0
 
   def put(self, key):
+    self.puts += 1
     self.memtbl.put(key)
 
   def get(self, key):
-    if key in self.memtbl.entries:
+    self.gets += 1
+    try:
+      i = self.memtbl.entries.index(key)
       self.memtbl.hits += 1
+      self.memtbl.hit_indexes[i] += 1
       return True
-    elif self.cache.get(key):
+    except ValueError:
+      self.memtbl.misses += 1
+
+    if self.cache.get(key):
       return True
     else:
+      self.layer_queries += 1
       result = self.memtbl.get(key)
       if result:
         self.cache.put(key)
@@ -42,6 +53,10 @@ class LSMulator():
   @property
   def disk_accesses(self):
     return sum(l.disk_accesses(self.page_size) for l in self.layers)
+
+  @property
+  def dupes_squashed(self):
+    return sum(l.dupes_squashed for l in self.layers)
 
   @classmethod
   def emulate(kls, queries, **kwargs):
