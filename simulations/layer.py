@@ -13,9 +13,12 @@ class Layer(LSMComponent):
     self.mergereads = []
     self.mergewrites = []
     self.dupes_squashed = 0
+    self.average_length = 0
+    self.gets = 0
     if index > 0:
       self.entries = set()
       self.bloom = Bloom(size, bsize, index)
+      self.average_predicted_fp_rate = 0
     else:
       self.hit_indexes = defaultdict(int)
       self.bloom = None
@@ -57,6 +60,13 @@ class Layer(LSMComponent):
     self.dupes_squashed += pre_merge_length - post_merge_length
 
   def get(self, key):
+    self.average_length = (self.average_length * self.gets + len(self.entries)) / float(self.gets + 1)
+    if self.index > 0:
+      m = self.bloom.bit_length
+      n = len(self.entries)
+      self.average_predicted_fp_rate = (self.average_predicted_fp_rate * self.gets + .6185**(m/float(n))) / float(self.gets + 1)
+    self.gets += 1
+
     if self.index == 0:
       # MEMTABLE
       try:
@@ -106,6 +116,10 @@ class Layer(LSMComponent):
       layers.append(layer)
       layer = layer.child
     return layers
+
+  @property
+  def average_fullness(self):
+    return self.average_length / float(self.size)
 
 def layer_sizes(n, memtbl_size, layer_ratio):
   n -= memtbl_size
