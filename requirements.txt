@@ -1,0 +1,12 @@
+numpy
+pandas
+matplotlib
+
+# For pickling
+dill
+
+# For the parallel simulation stuff
+pathos
+
+# For interactive visualizations
+bokeh
