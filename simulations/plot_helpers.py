@@ -43,4 +43,11 @@ def plot_workloads(wls):
         plt.yscale("log")
       else:
         plt.ylim(0, maxy)
-      plt.scatter(range(len(q)), q, alpha=0.025)
+
+      qs = list(enumerate(wl.queries))
+      read_x = [i for i, x in qs if x[1] == 0]
+      read_y = [x[0] for _, x in qs if x[1] == 0]
+      write_x = [i for i, x in qs if x[1] == 1]
+      write_y = [x[0] for _, x in qs if x[1] == 1]
+      plt.scatter(write_x, write_y, alpha=0.025, color="red")
+      plt.scatter(read_x, read_y, alpha=0.025, color="blue")
