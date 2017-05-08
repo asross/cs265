@@ -12,6 +12,17 @@ class LSMulator():
     self.memtbl = Layer(memtbl_size, ratio=layer_ratio, bsize=bloom_size, index=0)
     self.page_size = 256
 
+  def to_file(self, file_name):
+    import dill
+    with open(file_name, "wb") as f:
+      return f.write(dill.dumps(self))
+
+  @staticmethod
+  def from_file(file_name):
+    import dill
+    with open(file_name, "rb") as f:
+      return dill.loads(f.read())
+
   def put(self, key):
     self.memtbl.put(key)
 
