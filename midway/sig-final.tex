@@ -300,7 +300,9 @@ Expected cost for a null result read = $\sum_{j=1}^{L} p(fp_j)$
 
 Given a total memory allocation $M$, the total number of bits we can allocate to bloom filters is $M-M_c = \sum_{i=1}^L m_i$ \\
 Then the total formula for the expected cost of a read in the tree is: 
-$$E[c] = \sum_{i=1}^{L} \frac{B*P*T^i - \frac{B*P*T^i}{N-B*P} * M_c/E}{N} * \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right]$$ 
+\begin{multline}
+$$E[c] = \sum_{i=1}^{L} \frac{B*P*T^i - \frac{B*P*T^i}{N-B*P} * M_c/E}{N} \\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right]$$ 
+\end{multline}
 Whereas with a given percentage of null reads in the workload $p_{null}$:
 \begin{multline}
 $$E[c] = (1-p_{null})\sum_{i=1}^{L} \frac{B*P*T^i - \frac{B*P*T^i}{N-B*P} * M_c/E}{N} \\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right] + p_{null}\sum_{j=1}^{L} p(fp_j)$$
@@ -325,8 +327,39 @@ $$E[c] = \sum_{i=1}^{L} (1-p_{null})\frac{B*P*T^i - \frac{B*P*T^i}{N-B*P} * M_c/
 \subsection{Expected Cost with Bloom Filters - Generalized Distribution}
 Note that in the above, the workload specific factors are the probability that a read is at any given level and the related probability that any given item from a level is already in the cache. To compute an empirical estimation of the probability that any given item is in a layer but not already in the cache, we can simply keep statistics on the total number of times a key was found in that layer divided by the total number of (non-null) read queries executed. Then we can consider the following simplification:
 \begin{multline}
-$$E[c] = \sum_{i=1}^{L} (1-p_{null})\left[p(L_i) - p(cache) \right]\\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right] + p_{null} \cdot p(fp_i) $$
+$$E[c] = \sum_{i=1}^{L} (1-p_{null})\left[p(L_i) - \frac{p(L_i)}{(N - BP)} * M_c/E \right]\\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right] + p_{null} \cdot p(fp_i) $$
 \end{multline}
+
+Taking the derivative with respect to the number of entries in the cache, $M_c/E$, we get 
+$$
+- p(L_i)/(N - BP) \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right]
+$$
+Which is just the average cost of a read throughout the tree. Then, to keep statistics on how valuable we expect the cache to be, we maintain statistics on the average cost of every read performed in the window of interest.
+
+Because the memory allocation problem is discrete anyway, we consider the value of the bloom filters as a finite difference, that is the approximate value of any marginal bloom filter bit at layer $k$ will be $E[c | m_k+1] - E[c | m_k]$. In this computation, all terms in the sums drop out except for those concerning $m_j$, and we are left with:
+\begin{multline}
+$$\sum_{i=k}^{L} (1-p_{null})\left[p(L_i) - \frac{p(L_i)}{(N - BP)} * M_c/E \right] \\ \cdot \left\{ \left[ \left( (.6185) ^  {\frac{m_k+1}{B*P*T^j}}\right) +1 \right] - \left[ \left( (.6185) ^  {\frac{m_k}{B*P*T^j}}\right) +1 \right] \right\} \\+ p_{null}  \left( (.6185) ^  {\frac{m_k+1}{B*P*T^j}} - (.6185) ^  {\frac{m_k}{B*P*T^j}}\right)$$
+\end{multline}
+
+Rearranging terms, we get:
+\begin{multline}
+$$\sum_{i=k}^{L} \left[(1-p_{null})\left[p(L_i) - \frac{p(L_i)}{(N - BP)} * M_c/E \right] +  p_{null} \right] \\ \cdot \left( (.6185) ^  {\frac{m_k+1}{B*P*T^j}} - (.6185) ^  {\frac{m_k}{B*P*T^j}}\right)$$
+\end{multline}
+
+Where this is exactly the number of times the given bloom filter is accessed times the difference in the theoretical false positive rates given memory allocations $m_j$ and $m_j+1$. Then, to keep statistics on how valuable we expect any given bloom filter to be, we maintain statistics on the number of times every bloom filter was accessed in the window of interest.
+
+To estimate the additional value of any marginal memory in the buffer with respect to reads, we must make a number of simplifications, as $P$, the number of pages in the buffer, factors into every term in this equation. Further, the interaction between $P$ and most of the terms is not available in closed form, in general. Rather, the critical terms $P(L_i)$ we are empirically estimating. Then, for reasonably large values of $N$ and $P$, we will assume that the bloom filter false positive rate stays approximately the same, as does the value of the cache. Then, we consider only the change in I/Os occurring from the altered probability of any given element occurring in any layer as a result of more elements being in the memtable. Further, we can provide a simple underestimate of this by assuming that any items we add to the memtable will be removed from otherwise occurring in L1, without considering the added value resulting cascade through all other values in all other layers of the table.
+
+Then, an appropriate estimate of how useful any additional space of memory in the memtable is is simply the resulting change in $p(L_i)$ * 1 (as any element at L1 is accessed with a single I/O and no consideration of bloom filter false positive rates). To estimate how many additional times L1 would be accessed if we instead allocated the final portion of the memtable to L1, we keep statistics on how often the final spots of the memtable were accessed in a read.
+
+For the buffer, we must additionally consider the saved update/insert I/Os. 
+$$
+ \text{write cost} = \textrm{log}_{T} \frac{N}{BP}
+$$
+Taking the derivative with respect to $BP$ the number of items in the buffer, we get $\frac{1}{BP}$
+In discrete terms, this evaluates to $\textrm{log}_{T} \frac{BP}{BP+1}$
+
+And so over the course of the window of interest, we expect to save $\textrm{log}_{T} \frac{BP}{BP+1}$ * the number of update queries issued I/Os. The only statistic we need to compute this is the empirical number of update queries over the window.
 %\subsection{Variable Cache, Constant Layers}
 %
 %Now we want to analyze what happens when we vary the proportion of memory allocated to the cache and the memtable. Given a fixed memory size $n_v$, we first consider the simplification of assuming a constant layer structure. Of course, in general a larger memtable will allow for larger layers, affecting both read and write performance. Let $n_l$ be the size of the first layer when $n_v = n_m$ (all memtable) and $n_c =n_v - n_m$.\\ \\
