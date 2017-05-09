@@ -2,7 +2,7 @@
 
 \begin{document}
 
-\title{CS265 Midway Checkin}
+\title{CS265 Final Project}
 \subtitle{Optimizing Memory Allocation Between Memtable, Cache, and Bloom Filters}
 \numberofauthors{3}
 \author{
@@ -350,16 +350,17 @@ Where this is exactly the number of times the given bloom filter is accessed tim
 
 To estimate the additional value of any marginal memory in the buffer with respect to reads, we must make a number of simplifications, as $P$, the number of pages in the buffer, factors into every term in this equation. Further, the interaction between $P$ and most of the terms is not available in closed form, in general. Rather, the critical terms $P(L_i)$ we are empirically estimating. Then, for reasonably large values of $N$ and $P$, we will assume that the bloom filter false positive rate stays approximately the same, as does the value of the cache. Then, we consider only the change in I/Os occurring from the altered probability of any given element occurring in any layer as a result of more elements being in the memtable. Further, we can provide a simple underestimate of this by assuming that any items we add to the memtable will be removed from otherwise occurring in L1, without considering the added value resulting cascade through all other values in all other layers of the table.
 
-Then, an appropriate estimate of how useful any additional space of memory in the memtable is is simply the resulting change in $p(L_i)$ * 1 (as any element at L1 is accessed with a single I/O and no consideration of bloom filter false positive rates). To estimate how many additional times L1 would be accessed if we instead allocated the final portion of the memtable to L1, we keep statistics on how often the final spots of the memtable were accessed in a read.
+Then, an appropriate estimate of how useful any additional space of memory in the memtable is is simply the resulting change in $p(L_i)$ * 1 (as any element at L1 is accessed with a single I/O and no consideration of bloom filter false positive rates). To estimate how many additional times L1 would be accessed if we instead allocated the final portion of the memtable to L1, we keep statistics on how often the final spots of the memtable were accessed in a read. In practice, these spots are accessed only very infrequently, as the buffer is accessed only a handful of times at this stage before being flushed. This statistic might be more helpful on a system with constant compaction rather than a full layer flush.
 
 For the buffer, we must additionally consider the saved update/insert I/Os. 
 $$
  \text{write cost} = \textrm{log}_{T} \frac{N}{BP}
 $$
-Taking the derivative with respect to $BP$ the number of items in the buffer, we get $\frac{1}{BP}$
-In discrete terms, this evaluates to $\textrm{log}_{T} \frac{BP}{BP+1}$
+Taking the derivative with respect to $BP$, the number of items in the buffer, we get $\frac{1}{BP}$
+In discrete terms, this evaluates to $\textrm{log}_{T} \frac{BP}{BP+1}$. 
 
-And so over the course of the window of interest, we expect to save $\textrm{log}_{T} \frac{BP}{BP+1}$ * the number of update queries issued I/Os. The only statistic we need to compute this is the empirical number of update queries over the window.
+We consider additionally the fact that I/O savings are lessened by the number of duplicates inserted, as duplicates will not be merged the full length of the tree. To take this into account we also keep a statistic for the total number of duplicates merged over the window of interest and compute the expected number of saved I/Os for an increase in buffer as $\textrm{log}_{T} \frac{BP}{BP+1}$ * (number of puts - number of duplicates).
+The only statistics we need to compute this are the empirical number of update queries and the empirical number of duplicates found and removed over the window of interest.
 %\subsection{Variable Cache, Constant Layers}
 %
 %Now we want to analyze what happens when we vary the proportion of memory allocated to the cache and the memtable. Given a fixed memory size $n_v$, we first consider the simplification of assuming a constant layer structure. Of course, in general a larger memtable will allow for larger layers, affecting both read and write performance. Let $n_l$ be the size of the first layer when $n_v = n_m$ (all memtable) and $n_c =n_v - n_m$.\\ \\
@@ -411,28 +412,44 @@ And so over the course of the window of interest, we expect to save $\textrm{log
 %\begin{multline}
 %\frac{n_l * R^{i}*d_{hf} - \frac{n_v * R^{i}}{n_l * \frac{1-(R^j-1)}{1-R}} * r_{hf} * (n_v - n_m)}{d_{hf} * n_t} \\+ \frac{\frac{n_v * R^{i}}{n_l * \frac{1-(R^j-1)}{1-R}} *d_{hf} *(n_v - n_m)}{d_{hf} * n_t}  = p(Li_{hf})
 %\end{multline}
+\section{Statistical Gradient Descent}
+\subsection{Testing Accuracy and Variance of Statistics}
+First we generate a variety of workloads against which to test the accuracy of our statistics in predicting the change in I/Os for increasing the memory allocated to a given data structure. In this context, we hold all other data structures constant and increase the total memory by one entry (64 bits), which we give to the data structure being analyzed. 
 
-\subsection{Future Modeling Work}
+Results show wide dispersion around the predicted number of I/Os, which generally falls at or around the mean of the distribution.
 
-What we have done so far is to analytically compute basic quantities (like the
-expected cost of individual reads) as a function of LSM tree attributes for
-basic query distributions. Once we extend this analysis to allow the number of
-layers to vary with the memtable size, we should be able to directly compare
-these analytic results to simulation and experimental benchmarks, and then
-finally attempt to derive optimal LSM tree parameters.
+
+\subsection{Testing Theoretical I/O Savings Against Simulation}
+To test whether basic statistics are capable of accurately predicting proper memory reallocation based on workload, we add statistic collection for the statistics mentioned above to the simulator. Then, for points on the precomputed surface, we see what the expected I/Os would have been and what memory the heuristics above would have directed us to reallocate.
+
+\section{Results}
+
+\section{Future Work}
+There are many additional optimizations we chose not to address for the moment in this problem. For example, what is the optimal time to reallocate memory? In an environment where we assume full flushing of a given layer and the recomputation of all bloom filters for the layers involved in the flush, it seems like this would be an optimal point to reallocate memory locally among the data structures that are being rewritten anyway. However, this leads to only rare opportunities to recompute deeper layers of the LSM tree, and in practice LSM tree layers are not actually flushed in this `all-at-once' fashion. 
+
+Additionally, the equivalent to a stochastic gradient descent learning rate for our problem is the chunk size of memory that we allow to be reallocated at any calculation point. For now, we consider only the reallocation of the smallest available piece of memory. However, in situations where we have a large amount of conviction in the predictions and they show large potential gains, it might make more sense to reallocate a large block of memory at once. In this case, the reallocation strategy requires more thought than merely taking a chunk from the lowest value data structure and giving it to the highest value data structure. Optimally computing what that reallocation strategy would be would likely require a deeper set of statistics, showing a trend of value over the last portion of any of the data structures, rather than only the last key as we have been using.
+
+Building on the above, there are a number of opportunities for storing histograms rather than simple rolling averages of statistics (in particular, we store a histogram of bloom filter accesses at each stage of bloom filter `fullness' to allow us to calculate the average false positive rate for any number of bits after the fact rather than rolling averages of expected false positive rates for a few potential memory allocations). Histograms are a much heavier statistic than a simple number but provide a greater flexibility in the reallocation stage. More work needs to be done to calculate how much added benefit could be achieved in practice from these costlier statistics and to find scenarios in which they might be worthwhile.
+
+%What we have done so far is to analytically compute basic quantities (like the
+%expected cost of individual reads) as a function of LSM tree attributes for
+%basic query distributions. Once we extend this analysis to allow the number of
+%layers to vary with the memtable size, we should be able to directly compare
+%these analytic results to simulation and experimental benchmarks, and then
+%finally attempt to derive optimal LSM tree parameters.
 
 \section{Bringing it all together}
 
-Once we have analytic and simulated predictions of optimal RocksDB
-configurations that match benchmarking experiments, the final step will be to
-consider whether we can implement adaptive updating in RocksDB to optimize
-performance on the fly. We are considering several options, including on-the-fly
-inference and maintaining a small number of fixed parameter settings that we can
-dynamically decide between to simplify the problem.
-
-Overall, however, we believe even being able to determine the optimal LSM tree
-architecture in theory (based on a deep and accurate characterization of the
-workload) will be a useful contribution.
+%Once we have analytic and simulated predictions of optimal RocksDB
+%configurations that match benchmarking experiments, the final step will be to
+%consider whether we can implement adaptive updating in RocksDB to optimize
+%performance on the fly. We are considering several options, including on-the-fly
+%inference and maintaining a small number of fixed parameter settings that we can
+%dynamically decide between to simplify the problem.
+%
+%Overall, however, we believe even being able to determine the optimal LSM tree
+%architecture in theory (based on a deep and accurate characterization of the
+%workload) will be a useful contribution.
 
 \bibliographystyle{abbrv}
 \small
