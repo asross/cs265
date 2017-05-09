@@ -127,17 +127,14 @@ $$E[c] = \sum_{i=1}^{L} \left\{(1-p_{null})\frac{B*P*T^i - \frac{B*P*T^i}{N-B*P}
 We'd like to minimize this subject to the constraint that $M_c + \sum_{i=1}^L m_i = M$ \\
 (This assumes all levels are full at all times: should we assume half full on average?)
 
-\subsection{Expected Cost with Bloom Filters -Skewed Reads}
+\subsection{Expected Cost with Bloom Filters - Skewed Reads}
 
-Now consider the case for skewed reads, where we say $d_{hf}$ ($d_{lf}$) percent of the data receives $r_{hf}$ ($r_{lf}$) percent of the reads (where $d_{hf} + d_{lf} = 1$ and $r_{hf} + r_{lf} = 1$). On average, we can assume that the cache contains $r_{hf} * M_c/E$ items from $d_{hf} * N$ and $r_{lf} * M_c/E$ items from $d_{lf} * N$. Then the expected cost of a read is dependent on whether the data item being read is in $d_{hf} * N$ or $d_{lf} * N$ as the probability of a cache hit varies.\\
-For data in $d_{hf} * N$, \\ \\
-Probability that read is in memtable = $\frac{B*P*d_{hf}}{d_{hf} *N}  = p(mt)$\\
-Probability that read is in cache = $\frac{r_{hf} * M_c/E}{d_{hf} * N} = p(cache_{hf})$ \\
-Probability that read is in L1 but not in cache = $ \frac{B*P * T*d_{hf} - \frac{B*P * T}{N-B*P} * r_{hf} * M_c/E}{d_{hf} * N}  = p(L1_{hf})$ \\
-Expected cost of read on item in $d_{hf}$: $E[C_{hf}]= \sum_{i=1}^L \frac{B*P * T*d_{hf} - \frac{B*P * T}{N-B*P} * r_{hf} * M_c/E}{d_{hf} * N} * p(fp_i)$\\ \\
+Expected cost of read on item in $d_{hf}$: $E[C_{hf}]= \sum_{i=1}^L \frac{B*P * T*d_{hf} - \frac{B*P * T}{N-B*P} * r_{hf} * M_c/E}{d_{hf} * N} * \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right]$\\ \\
 
 The expected cost of a read on an item in $d_{lf}$ can be enumerated analogously, and we combine the expectation of reads in $d_{hf}$ and $d_{lf}$ as: \\
-Expected cost of read = $r_{hf} * E[C_{hf}] + r_{lf} * E[C_{lf}]$ \\ \\
+Expected cost of read = 
+\begin{multline}
+$$ \sum_{i=1}^L \left[ r_{hf} *\frac{B*P * T*d_{hf} - \frac{B*P * T}{N-B*P} * r_{hf} * M_c/E}{d_{hf} * N} + r_{lf} * \frac{B*P * T*d_{lf} - \frac{B*P * T}{N-B*P} * r_{lf} * M_c/E}{d_{lf} * N} \right] \\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right]$$\end{multline}
 We can also define $r_{lf}$ in terms of $r_{hf}$ as $r_{hf} - 1$ and  $d_{lf}$ in terms of $d_{hf}$ as $d_{hf} - 1$ . (Doing this will make the effect that moving these parameters in one direction or the other has more obvious in the total overall formula.)
 
 %\subsection{Variable Cache Size, Constant Number of Layers}
