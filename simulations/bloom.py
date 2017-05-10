@@ -11,6 +11,7 @@ class Bloom(LSMComponent):
       bit_length = bit_length[index-1]
     self.bit_length = bit_length # m
     self.hash_count = int(np.ceil((bit_length / size) * np.log(2))) # k
+    self.lengths = defaultdict(int)
     self.reset()
 
   def reset(self):
@@ -29,16 +30,27 @@ class Bloom(LSMComponent):
     self.hashes.update(self.hash_for[key])
 
   def get(self, key):
+    self.lengths[len(self.entries)] += 1
     result = self.hashes.issuperset(self.hash_for[key])
-    if result and key not in self.entries:
-      self.misses += 1
-    else:
-      self.hits += 1
+    if key not in self.entries:
+      if result:
+        self.misses += 1
+      else:
+        self.hits += 1
     return result
 
   @property
   def false_positive_rate(self):
     return self.miss_frequency
+
+  def estimated_fp_rate(self, m=None):
+    if m is None:
+      m = self.bit_length
+    total = float(sum(self.lengths.values()))
+    return sum([(count/total)*(0.6185**(m/float(n))) for n, count in self.lengths.items()])
+
+  def est_disk_accesses(self, m=None):
+    return self.estimated_fp_rate(m) * self.accesses
 
 if __name__ == '__main__':
   print('running bloom tests...', end=' ')
@@ -55,11 +67,11 @@ if __name__ == '__main__':
   assert(len(bf.hash_for) == 1)
   assert(list(bf.entries) == [5])
 
-  # getting entries in the filter is fine (++hits)
+  # getting entries in the filter is fine
   assert(bf.get(5))
   assert(len(bf.hash_for) == 1)
   assert(list(bf.entries) == [5])
-  assert(bf.hits == 2)
+  assert(bf.hits == 1)
   assert(bf.misses == 0)
 
   # if we force a hash collision...
@@ -67,6 +79,6 @@ if __name__ == '__main__':
 
   # then we incorrectly return false (and ++misses)
   assert(bf.get(7))
-  assert(bf.hits == 2)
+  assert(bf.hits == 1)
   assert(bf.misses == 1)
   print('success!')
