@@ -14,14 +14,10 @@ class Layer(LSMComponent):
     self.mergewrites = []
     self.dupes_squashed = 0
     self.average_length = 0
-    self.gets = 0
+    self.bloom = None
     if index > 0:
       self.entries = set()
       self.bloom = Bloom(size, bsize, index)
-      self.average_predicted_fp_rate = 0
-    else:
-      self.hit_indexes = defaultdict(int)
-      self.bloom = None
 
   def reset_counters(self):
     super(Layer, self).reset_counters()
@@ -60,35 +56,15 @@ class Layer(LSMComponent):
     self.dupes_squashed += pre_merge_length - post_merge_length
 
   def get(self, key):
-    self.average_length = (self.average_length * self.gets + len(self.entries)) / float(self.gets + 1)
-    if self.index > 0:
-      m = self.bloom.bit_length
-      n = len(self.entries)
-      self.average_predicted_fp_rate = (self.average_predicted_fp_rate * self.gets + .6185**(m/float(n))) / float(self.gets + 1)
-    self.gets += 1
+    was_accessed = (self.bloom is None or self.bloom.get(key))
 
-    if self.index == 0:
-      # MEMTABLE
-      try:
-        i = self.entries.index(key)
-        self.hits += 1
-        self.hit_indexes[i] += 1
-        return True
-      except ValueError:
-        self.misses += 1
+    if key in self.entries:
+      assert(was_accessed)
+      self.hits += 1
+      return True
     else:
-      # LAYER
-      if key in self.entries:
-        self.hits += 1
-        return True
-      elif self.bloom.get(key):
-        self.misses += 1
-
-    # If we didn't return, check the child
-    if self.child is None:
-      return False
-    else:
-      return self.child.get(key)
+      self.misses += was_accessed
+      return (self.child is not None and self.child.get(key))
 
   def disk_accesses(self, pagesize=256):
     total = self.accesses
