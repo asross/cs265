@@ -29,9 +29,9 @@ are often overwhelming. The developers of RocksDB \cite{facebook:rocksdb}, a
 popular and powerful key-value store, freely admit that ``configuring RocksDB
 optimally is not trivial,'' and that ``even [they] as RocksDB developers don't
 fully understand the effect of each configuration change''
-\cite{rocksdb-tuning-guide}. Configurations must be optimized with respect to a
-given \textit{workload}, which is rarely known in advance, although it is
-sometimes roughly characterizable. There has been recent work \cite{monkey} in
+\cite{rocksdb-tuning-guide}. Additionally, the optimality of a database configuration
+depends on that database's \textit{workload}, which is rarely known in advance.
+There has been recent work \cite{monkey} in
 determining the optimal memory allocation for bloom filters in terms of
 worst-case analysis and with respect to a number of basic workloads, but
 realistic key-value store workloads, which have been analyzed e.g. for Facebook
@@ -40,30 +40,31 @@ time, skewness, and key repeatability.
 
 Our goal is somewhat ambitious -- we seek to optimize not just bloom filter
 memory allocation but memory allocation across the entire key-value store (to
-cache, memtable, bloom filters, and possibly even fence pointers), and to do it
+cache, memtable, bloom filters), and to do it
 with respect to workloads we model as stochastic processes.
 
 \section{Workloads}
 
 Here are a number of basic workloads we will use to generate queries to
-benchmark our key-value store in Python simulations. For
-the simpler ones, we will also attempt to predict performance and derive
-optimal parameters analytically.
+benchmark our key-value store. We include many workloads that are standard in
+the literature as well as more complex workloads (inspired by
+\cite{characterizing-memcached} and \cite{linkbench}) that attempt to more
+accurately mimic realistic settings.
+
+\subsection{Simple workloads}
 
 \textbf{Uniform} queries will be drawn uniformly from keys $k \in
-\{0,1,...,K\}$, where $K$ is a maximum key (that we explore varying). When we
-draw a particular key $k_i$ for the first time, we will insert it into the
-database as a write, and subsequently we will treat it as a lookup. Later we
-will explore making a certain fraction of these queries into updates. The case
-of uniformly distributed queries is often one in which the cache is unhelpful,
-but in practice is highly unrealistic. Nevertheless, this is the scenario that
-many analyses assume for calculations of big O complexity.
+\{0,1,...,K\}$, where $K$ is a maximum key (that we explore varying).
+The case of uniformly distributed queries is often one in
+which the cache is unhelpful (unless $M_{cache} > K$), but in practice may be
+unrealistic. Nevertheless, this is the scenario that many analyses assume for
+calculations of big-O complexity.
 
 \textbf{Round-Robin} queries are drawn deterministically using $k_i = (i \mod
-K)$, i.e. we iteratively draw each key in sequence, then repeat. This is also a
-bad case for our key-value store in its default configuration; the fact that a
-key has been recently written or read is actually a contraindication we will
-access it again.
+K)$, i.e. we iteratively draw each key in sequence, then repeat.
+This is also a bad case for our key-value store in its default configuration;
+the fact that a key has been recently written or read is actually a
+contraindication we will access it again.
 
 \textbf{80-20} queries (which are considered in \cite{monkey}) are drawn such
 that 20\% of the most recently inserted keys constitute 80\% of the lookups.
@@ -76,27 +77,72 @@ where the probability of a given key $k$ is $\propto \frac{1}{k^s}$, where $s
 $s=1$, it is uniform with $K=\infty$. Zipf-distributed queries are considered
 in \cite{art} as another simple proxy for realistically skewed queries.
 
+For all the above queries, when we draw a particular key for the first time, we
+will insert it into the database as a write, and subsequently we will either
+look it up or update it with probability $w$.
+
+Examples of these workloads can be seen in Figure \ref{fig:simple-workloads}.
+
+\subsection{Complex workloads}
+
 \textbf{Discover-Decay} queries are distributed according to the following
 stochastic process, inspired by the Chinese Restaurant process \cite{crp} but
-with time decay: with every passing time increment $\Delta t \sim
-\textrm{Expo}(\lambda_t)$, $n \sim \textrm{Pois}(\lambda_n)$ new keys are written to the
-key-value store, which each have an inherent popularity $\theta_i \sim
-\textrm{Beta}(a_\theta,b_\theta)$ with a random decay rate $\gamma_i \sim
-\textrm{Beta}(a_\gamma,b_\gamma)$ that determines the exponential rate at which they
-become less popular. The probability of drawing each $k_i$ is given by
-$p(k_i,t) \propto \theta_i\gamma_i^{t-t_i}$, where $t$ is the current time and
-$t_i$ is when the key was inserted. At each time step we sample $N$ keys from
-$\textrm{Mult}(\{p(k_i,t)\})$. This stochastic process is somewhat arbitrary and we
-hope to make it more realistic, but it does capture many of the essential
-behaviors we know characterize key-value stores: new keys are constantly
-inserted, some keys are much more popular than others, and the popularity of
-most keys decays over time. The nonparametric nature of this stochastic process
-may make inference difficult, and we also hope to enhance it to make it more
-well-suited to realistic workloads (e.g. that exhibit daily periodicity), but
-it seems much more able to simulate the richness of realistic queries than many
-of the other models.
+with time decay: with every passing time step, we draw a number of reads $n_r$,
+writes $n_w$, and updates $n_u$ assuming queries arrive according to Poisson
+processes with configurable rates: \[
+\begin{split}
+  n_r & \sim \textrm{Pois}(\lambda_r) \\
+  n_w & \sim \textrm{Pois}(\lambda_w) \\
+  n_u & \sim \textrm{Pois}(\lambda_u)
+\end{split}
+\]
 
-\section{Simulations}
+Poisson processes are a reasonable choice for modeling the arrivals of database
+queries or in general the number of events that occur in a continuous time
+interval, and have been shown to be appropriate for database queries
+\cite{poisson-db1,poisson-db2,poisson-db3}; they are the model that emerges
+naturally if we make no special assumptions (i.e. maximum entropy) about the
+length of time between queries.  A more realistic model might increase and
+lower the rate to mimic the diurnal, weekly, and annual cycles seen in
+\cite{characterizing-memcached}, but especially on short timescales, Poisson
+processes should be much more realistic than assuming a uniform arrival rate
+(which we used above).
+
+Once we've drawn our $n_w$ new keys $k_i$, we assign them an initial popularity
+
+$$
+\theta_{i} \sim \textrm{Beta}(a_\theta,b_\theta)
+$$
+
+with a random decay rate
+
+$$
+\gamma_i \sim \textrm{Beta}(a_\gamma,b_\gamma)
+$$
+
+which is the factor by which they exponentially decay each subsequent time
+step. At any time $t$, the popularity of each key is given by $p(k_i,t) \propto
+\theta_i\gamma_i^{t-t_i}$, where $t_i$ is when the key was inserted. We use
+these time-dependent popularities to draw each of our $n_r$ reads and $n_u$
+updates from $\textrm{Mult}(\{p(k_i,t)\})$. Examples can be seen in Figure
+\ref{fig:discover-decay}.
+
+% include graphics
+
+\textbf{Periodic Decay} workloads are a simple modification of the
+Discover-Decay model where $p(k_i,t)$ now depends not only on the decay rate
+$\gamma_i$ but also on a periodic function of the key's age $t-t_i$.  To mimic
+the combination of exponential decay and sharp periodic peaking we see in
+\cite{characterizing-memcached} (from which we reproduce the relevant plot in
+Figure \ref{fig:memcached-decay}), we multiply $\theta_i\gamma_i^{t-t_i}$ by an
+inverse cycloid function with period $T$, clamped from 0 to 1, and taken to a
+configurable power (to make the cusps sharper or duller) that we call the
+cycloid's \texttt{cuspity}. Examples can be seen in Figure
+\ref{fig:periodic-decay}.
+
+% include graphics
+
+\section{The best allocation depends on the workload}
 
 We implemented a basic simulator of an LSM tree in Python \cite{lsmulator},
 which simulates how an LSM tree with a variably sized cache, memtable, disk
@@ -137,6 +183,12 @@ optimization.}
 \end{figure}
 
 To find the distribution between memtable, bloom filters, and cache that minimizes memory accesses for a given workload, we create a simulation which iterates through the possible allocations of memory given a total memory size, using both Monkey and RocksDB default bloom filter layer allocations for a given bloom filter memory size. 
+
+\section{Adaptively finding the best allocation}
+
+\subsection{Database gradient descent}
+
+
 
 The resulting surfaces suggest that for some workloads, local optimization (that is, gradient descent) can be effective for moving toward an optimal memory allocation without requiring that we iterate through all possibilities. Additionally, we note that to compute iterative local optimizations, we do not require that the entire workload be known a priori. Rather, we can collect minimal statistics throughout the query execution process and use these to estimate the current value in saved I/Os any marginal byte of the cache, bloom filters, or memtable is providing. To formulate the useful statistics, we turn to modeling.
 
