@@ -4,7 +4,8 @@ from bloom_assignments import *
 from workloads import *
 import scipy.stats
 import numpy as np
-import pickle
+import dill as pickle
+import traceback
 
 n = 50000
 k = 5000
@@ -26,10 +27,28 @@ i = 0
 for workload in workloads:
   print(workload)
   for M, dM in [(1000, 50), (10000, 200), (25000, 500)]:
-    bl_trees = LSMulator.cache_vs_bloom_vs_buf(workload, M, dM=dM, balloc=baseline_assignment, verbose=True)
-    mk_trees = LSMulator.cache_vs_bloom_vs_buf(workload, M, dM=dM, balloc=monkey_assignment, verbose=True)
-    bl = [(t.memtbl.size, t.cache.size, t.disk_accesses) for t in bl_trees]
-    mk = [(t.memtbl.size, t.cache.size, t.disk_accesses) for t in mk_trees]
-    with open('./results{}.pkl'.format(i), 'wb') as f:
-      pickle.dump((str(workload), M, dM, bl, mk), f)
+    print(M, dM)
+
+    try:
+      print("Baseline.")
+      bl_trees = LSMulator.cache_vs_bloom_vs_buf_threaded(workload, M, dM=dM, balloc=baseline_assignment, verbose=True)
+      bl = list(bl_trees)
+      for t in bl:
+        t.clear_data()
+      with open('./results-{}-{}-{}-{}.pkl'.format(str(workload), M, dM, "bl"), 'wb') as f:
+        pickle.dump((str(workload), M, dM, bl), f)
+    except Exception as ex:
+      traceback.print_exc()
+
+    try:
+      print("Monkey.")
+      mk_trees = LSMulator.cache_vs_bloom_vs_buf_threaded(workload, M, dM=dM, balloc=monkey_assignment, verbose=True)
+      mk = list(mk_trees)
+      for t in mk:
+        t.clear_data()
+      with open('./results-{}-{}-{}-{}.pkl'.format(str(workload), M, dM, "mk"), 'wb') as f:
+        pickle.dump((str(workload), M, dM, mk), f)
+    except Exception as ex:
+      traceback.print_exc()
+
     i += 1
