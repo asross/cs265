@@ -15,6 +15,14 @@ class LSMulator():
     self.puts = 0
     self.gets = 0
 
+  def clear_data(self):
+      self.memtbl.entries = None
+      for layer in self.layers:
+          layer.entries = None
+          if layer.bloom:
+            layer.bloom.entries = None
+      self.cache.entries = None
+
   def to_file(self, file_name):
     import dill
     with open(file_name, "wb") as f:
