@@ -6,6 +6,7 @@ import numpy as np
 from figure_grid import *
 from workloads import *
 from mpl_toolkits.mplot3d import Axes3D
+from bloom_assignments import *
 
 def plot_access_piechart(lsmtree, title=None):
   memtbl = lsmtree.memtbl
@@ -153,14 +154,14 @@ def compare_cbm_contours(monkey, baseline, quiver=True, figsize=(10,4)):
 
   fig = plt.figure(figsize=figsize)
   ax1 = plt.subplot(121)
-  plt.title('Monkey')
+  plt.title('Monkey', y=1.05)
   plot_cbm_simplex(monkey, norm=norm, ballocs=monkey_assignment, quiver=quiver)
   ax2 = plt.subplot(122)
-  plt.title('Baseline')
+  plt.title('Baseline', y=1.05)
   plot_cbm_simplex(baseline, norm=norm, ballocs=baseline_assignment, quiver=quiver)
+
   cbaxes = fig.add_axes([0.5, 0.1, 0.03, 0.8])
+  cbaxes.set_title(r'$\log_{10}(Disk)$')
   m = cm.ScalarMappable()
   m.set_array(np.hstack((Z1,Z2)))
   cb = plt.colorbar(m, cax = cbaxes)
-
-
