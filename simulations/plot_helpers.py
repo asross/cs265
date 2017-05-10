@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 import matplotlib.cm as cm
+import matplotlib.colors
 import numpy as np
 from figure_grid import *
 from workloads import *
@@ -68,9 +69,10 @@ def bary_to_cartesian(points):
   return out
 
 def cbm_results(trees):
-  return np.array([(t.memtbl.size, t.cache.size, t.disk_accesses) for t in trees]).T
+  return np.array([(t.memtbl.size, t.cache.size, np.log10(t.disk_accesses)) for t in trees]).T
 
-def plot_cbm_trisurf(X,Y,Z,**kwargs):
+def plot_cbm_trisurf(trees,**kwargs):
+  X,Y,Z = cbm_results(trees)
   i = Z.argmin()
   plt.gca().plot_trisurf(X,Y,Z,alpha=0.25,**kwargs)
   plt.scatter([X[i]],[Y[i]], zs=[Z[i]], s=50, c=kwargs.get('color', 'yellow'))
@@ -78,47 +80,74 @@ def plot_cbm_trisurf(X,Y,Z,**kwargs):
   plt.ylabel('Cache')
   plt.gca().set_zlabel('Disk')
 
-def plot_cbm_contourf(X,Y,Z,**kwargs):
+def plot_cbm_contourf(trees,**kwargs):
+  X,Y,Z = cbm_results(trees)
   i = Z.argmin()
   plt.tricontourf(tri.Triangulation(X,Y), Z, 100, **kwargs)
   plt.scatter(X[i],Y[i], s=50, c=kwargs.get('color', 'yellow'))
   plt.xlabel('Memtbl')
   plt.ylabel('Cache')
 
-def plot_cbm_colorbar(Z):
-  m = cm.ScalarMappable()
-  m.set_array(Z)
-  plt.colorbar(m)
+rt32 = np.sqrt(3)/2.
 
-def plot_cbm_simplex(X,Y,Z,M=None,**kwargs):
-  if M is None:
-    M = min(X)+max(Y)
+def savings_triples(trees, **kwargs):
+  return np.array([(t.bigger_cache_savings(p=0.5), t.bigger_memtbl_savings(), t.bigger_bloom_savings(**kwargs)) for t in trees])
+
+def savings_pairs(trees, **kwargs):
+  preds = savings_triples(trees, **kwargs)
+  maxes = preds.argmax(axis=1)
+  minis = preds.argmin(axis=1)
+  order = ['cache', 'memtbl', 'bloom']
+  return [(order[sm], order[lg]) for sm, lg in zip(minis, maxes)]
+
+def arrows_for(savepairs):
+  redist = { ('memtbl', 'cache'): np.array([1,0]),
+             ('cache', 'bloom'): np.array([-.5,.5*np.sqrt(3)]),
+             ('bloom', 'memtbl'): np.array([-.5,-.5*np.sqrt(3)])}
+  def arrow_for(p): return redist[p] if p in redist else -redist[p[::-1]]
+  return np.array([arrow_for(p) for p in savepairs])
+
+def plot_cbm_simplex(trees,ballocs=monkey_assignment,**kwargs):
+  X,Y,Z = cbm_results(trees)
+  M = min(X)+max(Y)
   i = Z.argmin()
   plt.axis('equal')
   plt.axis('off')
   C = bary_to_cartesian(np.vstack((X/M, Y/M, 1-X/M-Y/M)).T)
+  arrows = arrows_for(savings_pairs(trees, ballocs=ballocs))
   plt.tricontourf(tri.Triangulation(C[:,0], C[:,1]), Z, 100, **kwargs)
+  plt.quiver(C[:,0], C[:,1], arrows[:,0], arrows[:,1], color='black', alpha=0.5)
   plt.scatter(C[i,0], C[i,1], s=50, c=kwargs.get('color', 'yellow'))
-
   corners = np.array([[0, 0], [1, 0], [0.5, 0.75**0.5]])
   triangle = tri.Triangulation(corners[:, 0], corners[:, 1])
   plt.triplot(triangle, linewidth=1, linestyle='--', color='black', alpha=0.1)
-
-  plt.text(*corners[0], 'Buffer', {'ha': 'center', 'va': 'center'}, rotation=-45)
-  plt.text(*corners[1], 'Cache', {'ha': 'center', 'va': 'center'}, rotation=45)
+  plt.text(*[-0.05, 0], 'Buffer', {'ha': 'center', 'va': 'center'}, rotation=-60)
+  plt.text(*[1.05, 0], 'Cache', {'ha': 'center', 'va': 'center'}, rotation=60)
   plt.text(*corners[2], 'Bloom', {'ha': 'center', 'va': 'center'})
 
-def compare_cbm_trisurfs(monkey, baseline, ax=None):
+def compare_cbm_trisurfs(monkey, baseline, ballocs=None, ax=None):
   if ax is None:
     ax = plt.subplot(111, projection='3d')
-  plot_cbm_trisurf(*cbm_results(monkey), color='blue')
-  plot_cbm_trisurf(*cbm_results(baseline), color='red')
+  plot_cbm_trisurf(monkey, color='blue')
+  plot_cbm_trisurf(baseline, color='red')
 
-def compare_cbm_contours(monkey, baseline, method=plot_cbm_simplex, figsize=(10,4)):
-  plt.figure(figsize=figsize)
-  plt.subplot(121)
+def compare_cbm_contours(monkey, baseline, figsize=(10,4)):
+  _x1,_y1, Z1 = cbm_results(monkey)
+  _x2,_y2, Z2 = cbm_results(baseline)
+  Zmin = min(Z1.min(), Z2.min())
+  Zmax = max(Z1.max(), Z2.max())
+  norm = matplotlib.colors.Normalize(Zmin, Zmax)
+
+  fig = plt.figure(figsize=figsize)
+  ax1 = plt.subplot(121)
   plt.title('Monkey')
-  method(*cbm_results(monkey))
-  plt.subplot(122)
+  plot_cbm_simplex(monkey, norm=norm, ballocs=monkey_assignment)
+  ax2 = plt.subplot(122)
   plt.title('Baseline')
-  method(*cbm_results(baseline))
+  plot_cbm_simplex(baseline, norm=norm, ballocs=baseline_assignment)
+  cbaxes = fig.add_axes([0.5, 0.1, 0.03, 0.8])
+  m = cm.ScalarMappable()
+  m.set_array(np.hstack((Z1,Z2)))
+  cb = plt.colorbar(m, cax = cbaxes)
+
+

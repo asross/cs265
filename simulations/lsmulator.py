@@ -55,8 +55,8 @@ class LSMulator():
     for component in [self.cache, self.memtbl] + self.layers:
       component.reset_counters()
 
-  def bigger_cache_savings(self, dM=1):
-    return dM * self.cache.last_slot_hits * (self.disk_accesses / self.layer_queries)
+  def bigger_cache_savings(self, dM=1, p=0.67):
+    return dM * (self.cache.last_slot_hits*p + self.cache.penultimate_hits*(1-p)) * (self.disk_accesses / self.layer_queries)
 
   def bigger_memtbl_savings(self, dM=1):
     T = self.memtbl.ratio
@@ -121,11 +121,11 @@ class LSMulator():
   @classmethod
   def cache_vs_bloom_vs_buf(kls, workload, total, dM=100, ballocs=monkey_assignment, layer_ratio=2, verbose=False):
     trees = []
-    for memtbl in range(dM, total, dM):
+    for memtbl in range(dM, total + dM, dM):
       if verbose:
         print('Memtable =', memtbl)
       layers = LSMulator.emulate(workload.queries, memtbl_size=memtbl, layer_ratio=layer_ratio).layer_sizes
-      for bloom in range(0, total - memtbl, dM):
+      for bloom in range(0, total - memtbl + dM, dM):
         trees.append(LSMulator.emulate(workload.queries,
           layer_ratio=layer_ratio,
           memtbl_size=memtbl,
