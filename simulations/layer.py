@@ -1,6 +1,7 @@
 from lsm_component import *
 from bloom import *
 import numpy as np
+from collections import defaultdict
 
 class Layer(LSMComponent):
   def __init__(self, size, ratio=2, index=0, bsize=100):
@@ -9,11 +10,14 @@ class Layer(LSMComponent):
     self.ratio = ratio
     self.index = index
     self.bsize = bsize
-    self.bloom = Bloom(size, bsize, index) if index else None
     self.mergereads = []
     self.mergewrites = []
+    self.dupes_squashed = 0
+    self.average_length = 0
+    self.bloom = None
     if index > 0:
       self.entries = set()
+      self.bloom = Bloom(size, bsize, index)
 
   def reset_counters(self):
     super(Layer, self).reset_counters()
@@ -41,23 +45,26 @@ class Layer(LSMComponent):
     if len(self.entries):
       self.mergereads.append(len(self.entries))
 
+    pre_merge_length = len(self.entries) + len(entries)
     self.entries.update(entries)
+    post_merge_length = len(self.entries)
+
     for key in entries:
       self.bloom.put(key)
 
-    self.mergewrites.append(len(self.entries))
+    self.mergewrites.append(post_merge_length)
+    self.dupes_squashed += pre_merge_length - post_merge_length
 
   def get(self, key):
+    was_accessed = (self.bloom is None or self.bloom.get(key))
+
     if key in self.entries:
+      assert(was_accessed)
       self.hits += 1
       return True
     else:
-      if self.bloom is None or self.bloom.get(key):
-        self.misses += 1
-      if self.child is None:
-        return False
-      else:
-        return self.child.get(key)
+      self.misses += was_accessed
+      return (self.child is not None and self.child.get(key))
 
   def disk_accesses(self, pagesize=256):
     total = self.accesses
@@ -85,6 +92,10 @@ class Layer(LSMComponent):
       layers.append(layer)
       layer = layer.child
     return layers
+
+  @property
+  def average_fullness(self):
+    return self.average_length / float(self.size)
 
 def layer_sizes(n, memtbl_size, layer_ratio):
   n -= memtbl_size
