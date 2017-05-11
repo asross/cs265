@@ -176,50 +176,84 @@ cycloid's \texttt{cuspity}. Examples can be seen in row 3 of Figure
 
 \section{The workload matters}
 
-We wrote Python code to simulate how , an LSM tree with a variably sized cache,
-memtable, disk layers, and bloom filters performs for an arbitrary sequence of
-queries \cite{lsmulator}. In particular, we count disk accesses (the main
-performance bottleneck for an LSM tree) as well as statistics about the utility
-of each component. So far, results suggest that the same LSM tree architecture
-performs very differently under different query distributions (Figure
-\ref{fig:lsametree}), and that different LSM tree architectures perform
-very differently under the \textit{same} query distribution
-%(Figure
-%\ref{fig:sameqs-difftree}).
+The first important takeaway is that how much memory we should allocate to the cache,
+buffer, and bloom filters is highly dependent on the workload.
 
-\begin{figure*}[!htb]
+To investigate this, we wrote Python code to simulate how an LSM tree with a
+variably sized cache, memtable, disk layers, and bloom filters performs for an
+arbitrary sequence of queries \cite{lsmulator}. In particular, we count disk
+accesses (the main performance bottleneck for an LSM tree) as well as
+statistics about the utility of each component. For the experiments below, we
+started from an empty LSM tree, but future experiments should pick a sensible
+intermediate state.
+
+Figure \ref{fig:period-lsmulations} shows how the number of disk accesses (on a log
+color scale) changes as we run a full simulation along different allocations of
+8000 bytes (corresponding to the amount of memory needed to store 1000 64-bit
+entries, and assuming a page size of 2048 bytes), with about 50000 queries
+for each simulation. We allocate these 8000 bytes using a 400-byte grid spacing
+along the simplex of possible splits, and test using both Monkey and baseline
+bloom filter allocations \cite{monkey}.
+
+\begin{figure}[!htb]
 \begin{center}
-\includegraphics[width=\textwidth]{lsametree.png}
+\includegraphics[width=0.5\textwidth]{period2.png}
+\includegraphics[width=0.5\textwidth]{period1.png}
+\includegraphics[width=0.5\textwidth]{period3.png}
 \end{center}
-\caption{The same LSM tree architecture performs differently for different
-  query distributions. Memtable and cache hits (in green) are fast whereas
-  accesses to the layers (in red) are slow. For the Zipf workload, the cache is
-  much more useful than the buffer, while the situations are reversed for the
-Round-Robin workload. Both are useful for Discover-Decay.}
-\label{fig:lsametree}
-\end{figure*}
+\caption{Sets of simulation results for three variants of the Periodic Decay
+workload (shown in the top-left corner of each set of plots). The minimum,
+plotted as a yellow dot, is determined by exhaustive search over the simplex
+of possible allocations. Note how the best allocation is highly dependent
+on the workload, and how Monkey always outperforms the baseline allocation.}
+\label{fig:period-lsmulations}
+\end{figure}
 
-%\begin{figure}[!htb]
-%\begin{center}
-%\includegraphics[width=9cm]{sameqs-difftree.png}
-%\end{center}
-%\caption{Performance results for different LSM tree architectures on the
-%Discover-Decay workload. Note that for this time-dependent workload, both the
-%cache and the buffer are useful, but finding the best ratio may require
-%optimization.}
-%\label{fig:sameqs-difftree}
-%\end{figure}
+We will include results for many more workloads than just the Periodic Decay
+variants shown in Figure \ref{fig:period-lsmulations}, but even just those
+three are sufficient to illustrate a variety of takeaways. For the top plot,
+whose workload consists primarily of reads of very recently added keys but with a few
+old popular keys recurring at intervals, we obtain the best results by allocating
+most of our memory to the buffer (for reading recently added keys), but saving a little
+bit for the cache (for the old but popular recurring keys). The bloom filters are
+actually useless to us, and as such, it does not matter whether we use Monkey or not
+to allocate our bloom filters.
 
-To find the distribution between memtable, bloom filters, and cache that minimizes memory accesses for a given workload, we create a simulation which iterates through the possible allocations of memory given a total memory size, using both Monkey and RocksDB default bloom filter layer allocations for a given bloom filter memory size. 
+The middle plot shows a case where old keys recur in greater numbers (because the decay rates are lower), so the cache alone does not suffice, although it still helps for the most popular old keys (since there is still a spread). Now we transition into a regime where the bloom filter also helps, but only when we use Monkey to allocate memory optimally across the filters. The baseline allocation is not quite good enough to move the optimum away from the pure cache and buffer configuration (and the optimization landscape is starting to look non-convex).
+
+The bottom plot, which has a much higher periodic frequency along with slow decay, shows non-convexity or multimodality in the Monkey results; one local minimum involves allocating a significant amount of memory to the cache and less to the buffer, while another local minimum allocates memory to the buffer (plus slightly more bloom) and much less to the cache. The multimodality makes sense, because our LSM tree affords us multiple strategies for avoiding disk accesses on popular keys; one is to focus on recent keys, which are more likely to be popular, and another is to focus on keys which remain popular for a long time. Interestingly, in the baseline case, the cache strategy no longer works well, perhaps because it implicitly relied on the bloom filters in some way. Note also the discontinuities that occur along the buffer direction, which are a result of the number of layers sharply changing with the buffer size.
+
+These results demonstrate (1) there are many qualitatively distinct regimes of optimality in an LSM tree, (2) all components can be important, (3) Monkey consistently outperforms the baseline bloom filter allocation, even on fairly exotic workalods, and (4) due to the possibility of non-convexity, globally optimizing memory allocation might be challenging.
 
 \section{Adaptive Allocation}
 
-\subsection{Database gradient descent}
+But we can try anyway. Our key insight (thanks to Niv Dayan for this helpful
+suggestion) is to, during the normal query process, gather local statistics
+with low memory footprints in our LSM tree from which we can estimate the
+usefulness of each LSM tree component. We measure ``usefulness'' in the number
+of IOs we can save by adding an additional unit of memory to that component,
+or conversely the number of IOs we incur by removing one. These quantities
+can be interepreted as discrete \textit{gradients} of our LSM tree components
+with respect to IOs.
 
-
-
+\subsection{Stochastic DB Gradient Descent}
 
 The resulting surfaces suggest that for some workloads, local optimization (that is, gradient descent) can be effective for moving toward an optimal memory allocation without requiring that we iterate through all possibilities. Additionally, we note that to compute iterative local optimizations, we do not require that the entire workload be known a priori. Rather, we can collect minimal statistics throughout the query execution process and use these to estimate the current value in saved I/Os any marginal byte of the cache, bloom filters, or memtable is providing. To formulate the useful statistics, we turn to modeling.
+
+\subsection{Gradient of the Cache}
+
+\subsection{Gradient of the Bloom Filters}
+
+\subsection{Gradient of the Buffer}
+
+\begin{figure*}[!htb]
+\begin{center}
+\includegraphics[width=\textwidth]{all-savings.png}
+\end{center}
+\caption{Light-footprint statistical estimations of the gradient vs. simulated results for cache, bloom filters, and the buffer on three distinct workloads.}
+\label{fig:period-lsmulations}
+\end{figure*}
+
 
 \newpage
 \pagebreak
