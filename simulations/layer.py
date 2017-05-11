@@ -3,6 +3,12 @@ from bloom import *
 import numpy as np
 from collections import defaultdict
 
+def ceil(n):
+  return int(np.ceil(n))
+
+def pages(n, pagesize=256):
+  return ceil(n/float(pagesize))
+
 class Layer(LSMComponent):
   def __init__(self, size, ratio=2, index=0, bsize=100):
     super(Layer, self).__init__(size)
@@ -17,6 +23,7 @@ class Layer(LSMComponent):
     self.bloom = None
     self.n_in = 0
     self.n_out = 0
+    self.gets = 0
     if index > 0:
       self.entries = set()
       self.bloom = Bloom(size, bsize, index)
@@ -63,9 +70,26 @@ class Layer(LSMComponent):
     self.mergewrites.append(post_merge_length)
     self.dupes_squashed += pre_merge_length - post_merge_length
 
+  @property
+  def unique_fraction(self):
+    return 1 - self.dupes_squashed / self.n_in
+
+  def read_savings(self, dM):
+    M = self.size
+    kids = self.children()
+    if not kids:
+      return 0
+    lower_layer_disks = sum([l.accesses for l in kids])
+    lower_layer_gets = sum([l.gets for l in kids])
+    old_hits = self.hits
+    new_hits = self.hits * (M+dM) / M
+    extra_hits = new_hits - old_hits
+    savings = extra_hits * (lower_layer_disks / lower_layer_gets)
+    return savings + self.child.read_savings(dM * self.ratio)
+
   def get(self, key):
     was_accessed = (self.bloom is None or self.bloom.get(key))
-
+    self.gets += 1
     if key in self.entries:
       assert(was_accessed)
       self.hits += 1
@@ -81,10 +105,10 @@ class Layer(LSMComponent):
     return total
 
   def read_accesses(self, pagesize=256):
-    return sum([int(np.ceil(n_entries / float(pagesize))) for n_entries in self.mergereads])
+    return sum([ceil(n_entries / pagesize) for n_entries in self.mergereads])
 
   def write_accesses(self, pagesize=256):
-    return sum([int(np.ceil(n_entries / float(pagesize))) for n_entries in self.mergewrites])
+    return sum([ceil(n_entries / pagesize) for n_entries in self.mergewrites])
 
   def merge_down(self):
     self.n_out += len(self.entries)

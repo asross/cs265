@@ -19,7 +19,7 @@ def plot_access_piechart(lsmtree, title=None):
   mems = [cache.hits] + [memtbl.hits] + [l.accesses for l in layers]
   labs = ['Cache', 'Memtbl'] + ['L{}'.format(i+1) for i in range(l)]
   clrs = ['green', 'lightgreen'] + [((i+1)*(1./(l+1)), 0, 0) for i in range(l)]
-  patches, texts = plt.pie(mems, colors=colors)
+  patches, texts = plt.pie(mems, colors=clrs)
   plt.legend(patches, labels,  loc='left center', bbox_to_anchor=(-0.1, 1.), fontsize=8)
 
 def plot_access_barchart(lsmtree):
