@@ -15,8 +15,17 @@ workloads = [
   RoundRobinWorkload(n_queries=n, k_classes=k),
   ZipfWorkload(n_queries=n, zipf_param=1.1),
   ZipfWorkload(n_queries=n, zipf_param=1.5),
+  ZipfWorkload(n_queries=n, zipf_param=1.8),
+  EightyTwentyWorkload(n_queries=n, k_classes=k),
+  EightyTwentyWorkload(n_queries=n, k_classes=k, update_fraction=0.25),
+  EightyTwentyWorkload(n_queries=n, k_classes=k, update_fraction=0.65),
+  MultinomialWorkload(n_queries=n, k_classes=k),
+  MultinomialWorkload(n_queries=n, k_classes=k, dist=scipy.stats.gamma(2)),
+  MultinomialWorkload(n_queries=n, k_classes=k, dist=scipy.stats.expon(1)),
   DiscoverDecayWorkload(n_queries=n),
+  DiscoverDecayWorkload(n_queries=n, lookups=scipy.stats.poisson(8)),
   DiscoverDecayWorkload(n_queries=n, decay_rate=scipy.stats.beta(2, 1)),
+  DiscoverDecayWorkload(n_queries=n, updates=scipy.stats.poisson(0), decay_rate=scipy.stats.beta(2, 1)),
   DiscoverDecayWorkload(n_queries=n, updates=scipy.stats.poisson(16), decay_rate=scipy.stats.beta(2, 1)),
   PeriodicDecayWorkload(n_queries=n, period=100),
   PeriodicDecayWorkload(n_queries=n, period=1000),
@@ -26,7 +35,7 @@ workloads = [
 i = 0
 for workload in workloads:
   print(workload)
-  for M, dM in [(1000, 50), (10000, 200), (25000, 500)]:
+  for M, dM in [(1000, 50)]:
     print(M, dM)
 
     try:
