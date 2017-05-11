@@ -15,10 +15,12 @@ def plot_access_piechart(lsmtree, title=None):
   cache = lsmtree.cache
   layers = lsmtree.layers
   plt.axis('equal')
-  patches, texts = plt.pie(
-    [cache.hits] + [memtbl.hits] + [l.accesses for l in layers],
-    labels=['Cache', 'Memtbl'] + ['L{}'.format(i+1) for i in range(len(layers))],
-    colors=['green', 'lightgreen'] + [((i+1)*0.2, 0, 0) for i in range(len(layers))])
+  l = len(layers)
+  mems = [cache.hits] + [memtbl.hits] + [l.accesses for l in layers]
+  labs = ['Cache', 'Memtbl'] + ['L{}'.format(i+1) for i in range(l)]
+  clrs = ['green', 'lightgreen'] + [((i+1)*(1./(l+1)), 0, 0) for i in range(l)]
+  patches, texts = plt.pie(mems, colors=colors)
+  plt.legend(patches, labels,  loc='left center', bbox_to_anchor=(-0.1, 1.), fontsize=8)
 
 def plot_access_barchart(lsmtree):
   memtbl = lsmtree.memtbl
@@ -111,7 +113,7 @@ def arrows_for(savepairs):
   def arrow_for(p): return redist[p] if p in redist else -redist[p[::-1]]
   return np.array([arrow_for(p) for p in savepairs])
 
-def plot_cbm_simplex(trees,ballocs=monkey_assignment,quiver=True,**kwargs):
+def plot_cbm_simplex(trees,ballocs=monkey_assignment,dM=100,quiver=True,paths=False,**kwargs):
   X,Y,Z = cbm_results(trees)
   M = min(X)+max(Y)
   i = Z.argmin()
@@ -128,6 +130,11 @@ def plot_cbm_simplex(trees,ballocs=monkey_assignment,quiver=True,**kwargs):
   if quiver:
     arrows = arrows_for(savings_pairs(trees, ballocs=ballocs))
     plt.quiver(C[:,0], C[:,1], arrows[:,0], arrows[:,1], color='black', alpha=0.5)
+
+  if paths:
+    paths = savings_paths(trees, dM=dM, ballocs=ballocs)
+    for path in paths:
+      plt.plot(C[path,0], C[path,1], color='yellow', alpha=0.25, lw=2)
 
   # experimental minimum
   plt.scatter(C[i,0], C[i,1], s=50, c=kwargs.get('color', 'yellow'))
@@ -148,7 +155,7 @@ def compare_cbm_trisurfs(monkey, baseline, ballocs=None, ax=None):
   plot_cbm_trisurf(monkey, color='blue')
   plot_cbm_trisurf(baseline, color='red')
 
-def compare_cbm_contours(monkey, baseline, quiver=True, figsize=(10,4)):
+def compare_cbm_contours(monkey, baseline, quiver=True, paths=False, dM=100, figsize=(10,4)):
   _x1,_y1, Z1 = cbm_results(monkey)
   _x2,_y2, Z2 = cbm_results(baseline)
   Zmin = min(Z1.min(), Z2.min())
@@ -158,13 +165,44 @@ def compare_cbm_contours(monkey, baseline, quiver=True, figsize=(10,4)):
   fig = plt.figure(figsize=figsize)
   ax1 = plt.subplot(121)
   plt.title('Monkey', y=1.05)
-  plot_cbm_simplex(monkey, norm=norm, ballocs=monkey_assignment, quiver=quiver)
+  plot_cbm_simplex(monkey, norm=norm, ballocs=monkey_assignment, quiver=quiver, paths=paths, dM=dM)
   ax2 = plt.subplot(122)
   plt.title('Baseline', y=1.05)
-  plot_cbm_simplex(baseline, norm=norm, ballocs=baseline_assignment, quiver=quiver)
+  plot_cbm_simplex(baseline, norm=norm, ballocs=baseline_assignment, quiver=quiver, paths=paths, dM=dM)
 
   cbaxes = fig.add_axes([0.5, 0.1, 0.03, 0.8])
   cbaxes.set_title(r'$\log_{10}(Disk)$')
   m = cm.ScalarMappable()
   m.set_array(np.hstack((Z1,Z2)))
   cb = plt.colorbar(m, cax = cbaxes)
+
+def savings_paths(trees, dM, **kwargs):
+  results = cbm_results(trees).T
+  savepairs = savings_pairs(trees, **kwargs)
+  redist = { ('memtbl', 'cache'): np.array([-dM, dM]),
+             ('cache', 'bloom'): np.array([0, -dM]),
+             ('bloom', 'memtbl'): np.array([dM, 0]) }
+  def redist_for(p):
+    return redist[p] if p in redist else -redist[p[::-1]]
+  def next_i(i):
+    table1, cache1, _ = results[i]
+    dt, dc = redist_for(savepairs[i])
+    table2 = table1 + dt
+    cache2 = cache1 + dc
+    for j, (table, cache, _) in enumerate(results):
+      if table == table2 and cache == cache2:
+        return j
+  paths = []
+  for i in range(len(trees)):
+    path = [i]
+    visited = set([i])
+    while True:
+      j = next_i(i)
+      if j is None or j in visited:
+        break
+      else:
+        path.append(j)
+        visited.add(j)
+        i = j
+    paths.append(path)
+  return paths

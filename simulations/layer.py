@@ -15,9 +15,13 @@ class Layer(LSMComponent):
     self.dupes_squashed = 0
     self.average_length = 0
     self.bloom = None
+    self.n_in = 0
+    self.n_out = 0
     if index > 0:
       self.entries = set()
       self.bloom = Bloom(size, bsize, index)
+    else:
+      self.last_slot_hits = 0
 
   def reset_counters(self):
     super(Layer, self).reset_counters()
@@ -36,7 +40,11 @@ class Layer(LSMComponent):
     else:
       self.entries.append(key)
 
+    self.n_in += 1
+
   def merge(self, entries):
+    self.n_in += len(entries)
+
     assert(len(entries) <= self.size)
 
     if len(entries) > self.free_space:
@@ -72,7 +80,15 @@ class Layer(LSMComponent):
       total += int(np.ceil(n_entries / float(pagesize)))
     return total
 
+  def read_accesses(self, pagesize=256):
+    return sum([int(np.ceil(n_entries / float(pagesize))) for n_entries in self.mergereads])
+
+  def write_accesses(self, pagesize=256):
+    return sum([int(np.ceil(n_entries / float(pagesize))) for n_entries in self.mergewrites])
+
   def merge_down(self):
+    self.n_out += len(self.entries)
+
     if self.index > 0:
       self.mergereads.append(len(self.entries))
     # if we can't accept all the new entries, then merge existing entries to the next layer

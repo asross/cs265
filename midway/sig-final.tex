@@ -2,7 +2,7 @@
 
 \begin{document}
 
-\title{CS265 Final Project}
+\title{CS265 Final Project: LSM-tree gradient descent}
 \subtitle{Optimizing Memory Allocation Between Memtable, Cache, and Bloom Filters}
 \numberofauthors{3}
 \author{
@@ -96,7 +96,7 @@ Examples of these workloads can be seen in the first row of Figure
 
 \begin{figure*}[!htb]
 \begin{center}
-\includegraphics[width=\textwidth]{workloads.png}
+\includegraphics[width=0.81\textwidth]{workloads.png}
 \end{center}
 \caption{Example workloads we generated for benchmarking. The first row
   contains simple workloads where the distribution of key popularities does not
@@ -149,6 +149,18 @@ these time-dependent popularities to draw each of our $n_r$ reads and $n_u$
 updates from $\textrm{Mult}(\{p(k_i,t)\})$. Examples can be seen in Figure
 \ref{fig:workloads}.
 
+\begin{figure}[!htb]
+\begin{center}
+\includegraphics[width=0.4\textwidth]{cuspity.png}
+\end{center}
+\caption{Key reuse histogram from \cite{characterizing-memcached} showing the
+  popularity of keys requested multiple times as a function of the number of
+  hours since the previous access for a number of real key-value store
+  workloads from Facebook. Note the overall trend of exponential decay with a
+  sharply period subsignal on the hour scale (for most workloads).}
+\label{fig:memcached-decay}
+\end{figure}
+
 \textbf{Periodic Decay} workloads are a simple modification of the
 Discover-Decay model where $p(k_i,t)$ now depends not only on the decay rate
 $\gamma_i$ but also on a periodic function of the key's age $t-t_i$.  To mimic
@@ -160,67 +172,60 @@ configurable power (to make the cusps sharper or duller) that we call the
 cycloid's \texttt{cuspity}. Examples can be seen in row 3 of Figure
 \ref{fig:workloads}.
 
-\begin{figure}[!htb]
+\pagebreak
+
+\section{The workload matters}
+
+We wrote Python code to simulate how , an LSM tree with a variably sized cache,
+memtable, disk layers, and bloom filters performs for an arbitrary sequence of
+queries \cite{lsmulator}. In particular, we count disk accesses (the main
+performance bottleneck for an LSM tree) as well as statistics about the utility
+of each component. So far, results suggest that the same LSM tree architecture
+performs very differently under different query distributions (Figure
+\ref{fig:lsametree}), and that different LSM tree architectures perform
+very differently under the \textit{same} query distribution
+%(Figure
+%\ref{fig:sameqs-difftree}).
+
+\begin{figure*}[!htb]
 \begin{center}
-\includegraphics[width=0.5\textwidth]{cuspity.png}
+\includegraphics[width=\textwidth]{lsametree.png}
 \end{center}
-\caption{Key reuse histogram from \cite{characterizing-memcached} showing the
-  popularity of keys requested multiple times as a function of the number of
-  hours since the previous access for a number of real key-value store
-  workloads from Facebook. Note the overall trend of exponential decay with a
-  sharply period subsignal on the hour scale (for most workloads).}
-\label{fig:memcached-decay}
-\end{figure}
+\caption{The same LSM tree architecture performs differently for different
+  query distributions. Memtable and cache hits (in green) are fast whereas
+  accesses to the layers (in red) are slow. For the Zipf workload, the cache is
+  much more useful than the buffer, while the situations are reversed for the
+Round-Robin workload. Both are useful for Discover-Decay.}
+\label{fig:lsametree}
+\end{figure*}
 
-\section{The best allocation depends on the workload}
-
-We implemented a basic simulator of an LSM tree in Python \cite{lsmulator},
-which simulates how an LSM tree with a variably sized cache, memtable, disk
-layers, and bloom filters performs for an arbitrary sequence of queries. In
-particular, we are able to simulate how often we are forced to access data on
-disk (the main performance bottleneck for an LSM tree) and how often we can
-respond with data in memory. So far, results suggest that the same LSM tree
-architecture performs very differently under different query distributions
-(Figure \ref{fig:sametree-diffqs}), and that different LSM tree architectures
-perform very differently under the \textit{same} query distribution (Figure
-\ref{fig:sameqs-difftree}). 
-%We are working on an optimization procedure to find
-%the best architecture for a given set of queries.
-
-\begin{figure}[!htb]
-\begin{center}
-\includegraphics[width=9cm]{sametree-diffqs.png}
-\end{center}
-\caption{The same LSM tree architecture (a 25-element cache, 100-element
-memtable, 5x layer ratio, and 10-bit bloom filters with 5 hash functions)
-performs very differently for different query distributions. Memtable and cache
-hits (in green) are fast, whereas accesses to the layers (in red) are slow. For
-the Zipf workload, the cache is much more useful than the memtable, while the
-situations are reversed for the Round-Robin workload. Both are useful in the
-discover-decay case.}
-\label{fig:sametree-diffqs}
-\end{figure}
-
-\begin{figure}[!htb]
-\begin{center}
-\includegraphics[width=9cm]{sameqs-difftree.png}
-\end{center}
-\caption{Performance results for different LSM tree architectures on the
-discover-decay workload. Note that for this time-dependent workload, both the
-cache and the memtable are useful, but finding the best ratio may require
-optimization.}
-\label{fig:sameqs-difftree}
-\end{figure}
+%\begin{figure}[!htb]
+%\begin{center}
+%\includegraphics[width=9cm]{sameqs-difftree.png}
+%\end{center}
+%\caption{Performance results for different LSM tree architectures on the
+%Discover-Decay workload. Note that for this time-dependent workload, both the
+%cache and the buffer are useful, but finding the best ratio may require
+%optimization.}
+%\label{fig:sameqs-difftree}
+%\end{figure}
 
 To find the distribution between memtable, bloom filters, and cache that minimizes memory accesses for a given workload, we create a simulation which iterates through the possible allocations of memory given a total memory size, using both Monkey and RocksDB default bloom filter layer allocations for a given bloom filter memory size. 
 
-\section{Adaptively finding the best allocation}
+\section{Adaptive Allocation}
 
 \subsection{Database gradient descent}
 
 
 
+
 The resulting surfaces suggest that for some workloads, local optimization (that is, gradient descent) can be effective for moving toward an optimal memory allocation without requiring that we iterate through all possibilities. Additionally, we note that to compute iterative local optimizations, we do not require that the entire workload be known a priori. Rather, we can collect minimal statistics throughout the query execution process and use these to estimate the current value in saved I/Os any marginal byte of the cache, bloom filters, or memtable is providing. To formulate the useful statistics, we turn to modeling.
+
+\newpage
+\pagebreak
+\pagebreak
+\pagebreak
+\pagebreak
 
 %\section{Benchmarking}
 %

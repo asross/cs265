@@ -41,6 +41,7 @@ class LSMulator():
   def get(self, key):
     if key in self.memtbl.entries:
       self.memtbl.hits += 1
+      self.memtbl.last_slot_hits += self.memtbl.full and key == self.memtbl.entries[-1]
       return True
     elif self.cache.get(key):
       return True
@@ -55,7 +56,7 @@ class LSMulator():
     for component in [self.cache, self.memtbl] + self.layers:
       component.reset_counters()
 
-  def bigger_cache_savings(self, dM=1, p=0.67):
+  def bigger_cache_savings(self, dM=1, p=1):
     return dM * (self.cache.last_slot_hits*p + self.cache.penultimate_hits*(1-p)) * (self.disk_accesses / self.layer_queries)
 
   def bigger_memtbl_savings(self, dM=1):
