@@ -5,6 +5,7 @@ import matplotlib.colors
 import numpy as np
 from figure_grid import *
 from workloads import *
+from bloom_assignments import *
 from mpl_toolkits.mplot3d import Axes3D
 from bloom_assignments import *
 
