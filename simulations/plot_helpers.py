@@ -149,13 +149,17 @@ def plot_cbm_simplex(trees,ballocs=monkey_assignment,dM=100,quiver=True,paths=Fa
   plt.text(*[1.05, 0], 'Cache', {'ha': 'center', 'va': 'center'}, rotation=60)
   plt.text(*corners[2], 'Bloom', {'ha': 'center', 'va': 'center'})
 
+  # limits
+  plt.xlim(-0.05, 1.05)
+  plt.ylim(-0.05, 0.9)
+
 def compare_cbm_trisurfs(monkey, baseline, ballocs=None, ax=None):
   if ax is None:
     ax = plt.subplot(111, projection='3d')
   plot_cbm_trisurf(monkey, color='blue')
   plot_cbm_trisurf(baseline, color='red')
 
-def compare_cbm_contours(monkey, baseline, quiver=True, paths=False, dM=100, figsize=(10,4)):
+def compare_cbm_contours(monkey, baseline, quiver=True, paths=False, dM=100, figsize=(10,3)):
   _x1,_y1, Z1 = cbm_results(monkey)
   _x2,_y2, Z2 = cbm_results(baseline)
   Zmin = min(Z1.min(), Z2.min())
@@ -170,8 +174,8 @@ def compare_cbm_contours(monkey, baseline, quiver=True, paths=False, dM=100, fig
   plt.title('Baseline', y=1.05)
   plot_cbm_simplex(baseline, norm=norm, ballocs=baseline_assignment, quiver=quiver, paths=paths, dM=dM)
 
-  cbaxes = fig.add_axes([0.5, 0.1, 0.03, 0.8])
-  cbaxes.set_title(r'$\log_{10}(Disk)$')
+  cbaxes = fig.add_axes([0.495, 0.175, 0.02, 0.67])
+  cbaxes.set_title(r'$\log_{10}$(Disk)', fontsize=10)
   m = cm.ScalarMappable()
   m.set_array(np.hstack((Z1,Z2)))
   cb = plt.colorbar(m, cax = cbaxes)

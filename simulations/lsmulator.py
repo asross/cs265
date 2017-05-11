@@ -149,9 +149,9 @@ class LSMulator():
 
     # Pre-generate jobs
     def generate_jobs():
-      for i, memtbl in enumerate(range(dM, total, dM)):
+      for i, memtbl in enumerate(range(dM, total + dM, dM)):
         layers = layer_sizes[i]
-        for bloom in range(0, total - memtbl, dM):
+        for bloom in range(0, total - memtbl + dM, dM):
           yield dict(
               queries=workload.queries,
               layer_ratio=layer_ratio,
