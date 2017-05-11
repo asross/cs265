@@ -14,45 +14,52 @@ class Workload():
     creates = set([key for key, is_write in self.queries if is_write])
     return len(creates)
 
+  def title(self):
+    return self.__repr__()
+
 class RoundRobinWorkload(Workload):
   def __init__(self, n_queries=25000, k_classes=2500, update_fraction=0.):
     self.n = n_queries
     self.k = k_classes
-    self.u = update_fraction
+    self.w = update_fraction
 
   @cacheprop
   def queries(self):
-    return readwritify([q % self.k for q in range(self.n)], self.u)
+    return readwritify([q % self.k for q in range(self.n)], self.w)
+
+  def title(self):
+    return 'RoundRobinWorkload(\n$K={}$, $w={}$)'.format(self.k, self.w)
+
 
   def __repr__(self):
-    return 'RoundRobinWorkload'
+    return 'RoundRobinWorkload(k={},w={})'.format(self.k, self.w)
 
 class ZipfWorkload(Workload):
   def __init__(self, n_queries=25000, zipf_param=1.1, update_fraction=0.):
     assert(zipf_param > 1)
     self.n = n_queries
-    self.z = zipf_param
-    self.u = update_fraction
+    self.s = zipf_param
+    self.w = update_fraction
 
   @cacheprop
   def queries(self):
-    return readwritify(np.random.zipf(self.z, self.n), self.u)
+    return readwritify(np.random.zipf(self.s, self.n), self.w)
 
-  def __repr__(self):
-    return 'ZipfWorkload({})'.format(self.z)
+  def title(self): return 'ZipfWorkload(\n$s={}$, $w={}$)'.format(self.s, self.w)
+  def __repr__(self): return 'ZipfWorkload(s={},w={})'.format(self.s, self.w)
 
 class MultinomialWorkload(Workload):
   def __init__(self, n_queries=25000, k_classes=2500, dist=scipy.stats.uniform(), update_fraction=0.):
     self.n = n_queries
     self.k = k_classes
     self.dist = dist
-    self.u = update_fraction
+    self.w = update_fraction
 
   @cacheprop
   def queries(self):
     self.probs = self.dist.rvs(size=self.k)
     self.probs /= self.probs.sum()
-    return readwritify(np.random.choice(self.k, size=self.n, p=self.probs), self.u)
+    return readwritify(np.random.choice(self.k, size=self.n, p=self.probs), self.w)
 
   def __repr__(self):
     return 'MultinomialWorkload({})'.format(distr(self.dist))
@@ -62,10 +69,27 @@ class UniformWorkload(MultinomialWorkload):
     self.n = n_queries
     self.k = k_classes
     self.dist = scipy.stats.uniform()
-    self.u = update_fraction
+    self.w = update_fraction
 
-  def __repr__(self):
-    return 'UniformWorkload'
+  def title(self): return 'UniformWorkload(\n$K={}$, $w={}$)'.format(self.k, self.w)
+  def __repr__(self): return 'UniformWorkload(K={},w={})'.format(self.k, self.w)
+
+class EightyTwentyWorkload(Workload):
+  def __init__(self, n_queries=25000, k_classes=2500, update_fraction=0.):
+    self.n = n_queries
+    self.k = k_classes
+    self.w = update_fraction
+
+  @cacheprop
+  def queries(self):
+    k1 = int(self.k * 0.2)
+    k2 = self.k - k1
+    probs = np.array([8. for _ in range(k1)] + [2. for _ in range(k2)])
+    probs /= probs.sum()
+    return readwritify(np.random.choice(self.k, size=self.n, p=probs), self.w)
+
+  def title(self): return 'EightyTwentyWorkload(\n$K={}$, $w={}$)'.format(self.k, self.w)
+  def __repr__(self): return 'EightyTwentyWorkload(K={},w={})'.format(self.k, self.w)
 
 class DiscoverDecayWorkload(Workload):
   def __init__(self, n_queries=25000,
@@ -85,8 +109,20 @@ class DiscoverDecayWorkload(Workload):
     return np.random.choice(len(pops), p=pops/pops.sum(), size=size)
 
   def __repr__(self):
-    return 'DiscoverDecay(\nlookups~{},\ncreates~{},\nupdates~{},\npopularity~{},\ndecay_rate~{})'.format(
-        *[distr(d) for d in [self.lookups,self.creates,self.updates,self.popularity,self.decay_rate]])
+    return 'DiscoverDecay(n~Pois([{},{},{}]), θ~Beta({},{}), γ~Beta({},{}))'.format(
+        *self.lookups.args,
+        *self.creates.args,
+        *self.updates.args,
+        *self.popularity.args,
+        *self.decay_rate.args)
+
+  def title(self):
+    return 'DiscoverDecay(\n$n$~Pois([${},{},{}$]),\n$\\theta$~Beta(${},{}$),\n$\gamma$~Beta(${},{}$))'.format(
+        *self.lookups.args,
+        *self.creates.args,
+        *self.updates.args,
+        *self.popularity.args,
+        *self.decay_rate.args)
 
   @cacheprop
   def queries(self):
@@ -139,8 +175,22 @@ class PeriodicDecayWorkload(Workload):
     return np.random.choice(len(pops), p=pops/pops.sum(), size=size)
 
   def __repr__(self):
-    return 'PeriodicDecay(\nlookups~{},\ncreates~{},\nupdates~{},\npopularity~{},\ndecay_rate~{}\nperiod,cuspity={},{})'.format(
-        *([distr(d) for d in [self.lookups,self.creates,self.updates,self.popularity,self.decay_rate]]+[self.period,self.cuspiness]))
+    return 'PeriodicDecay(T={}, cusp={}, n~Pois([{},{},{}]), θ~Beta({},{}), γ~Beta({},{}))'.format(
+        self.period, self.cuspiness,
+        *self.lookups.args,
+        *self.creates.args,
+        *self.updates.args,
+        *self.popularity.args,
+        *self.decay_rate.args)
+
+  def title(self):
+    return 'PeriodicDecay(\n$n$~Pois([${},{},{}$)],\n$\\theta$~Beta(${},{}$),\n$\gamma$~Beta(${},{}$),\n$T={}$,cusp=${}$)'.format(
+        *self.lookups.args,
+        *self.creates.args,
+        *self.updates.args,
+        *self.popularity.args,
+        *self.decay_rate.args,
+        self.period, self.cuspiness)
 
   @cacheprop
   def queries(self):

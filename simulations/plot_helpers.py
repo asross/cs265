@@ -39,23 +39,25 @@ def plot_bloom_fp_rates(lsmtree, title=None):
 
 def plot_workloads(wls):
   qs = [[q[0] for q in wl.queries] for wl in wls]
-  maxy = max(max(q) for q in qs)
+  try:
+    maxy = max(max(q) for i, q in enumerate(qs) if type(wls[i]) != ZipfWorkload)
+  except:
+    pass
   maxx = len(qs[0])
   with figure_grid(1, len(wls)) as grid:
     for q, wl, ax in zip(qs, wls, grid.each_subplot()):
-      plt.title(wl)
+      plt.title(wl.title())
       plt.xlim(0, maxx)
       if type(wl) == ZipfWorkload:
         plt.yscale("log")
       else:
         plt.ylim(0, maxy)
-
       qs = list(enumerate(wl.queries))
       read_x = [i for i, x in qs if x[1] == 0]
       read_y = [x[0] for _, x in qs if x[1] == 0]
       write_x = [i for i, x in qs if x[1] == 1]
       write_y = [x[0] for _, x in qs if x[1] == 1]
-      plt.scatter(write_x, write_y, alpha=0.025, color="red")
+      plt.scatter(write_x, write_y, alpha=0.025, color="green")
       plt.scatter(read_x, read_y, alpha=0.025, color="blue")
 
 def bary_to_cartesian(points):
