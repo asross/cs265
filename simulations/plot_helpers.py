@@ -8,6 +8,7 @@ from workloads import *
 from bloom_assignments import *
 from mpl_toolkits.mplot3d import Axes3D
 from bloom_assignments import *
+from collections import defaultdict
 
 def plot_access_piechart(lsmtree, title=None):
   memtbl = lsmtree.memtbl
@@ -38,21 +39,20 @@ def plot_bloom_fp_rates(lsmtree, title=None):
   plt.yticks(positions, ['L{}'.format(i+1) for i in range(len(fp_rates))])
   plt.xlim((0,1))
 
-def plot_workloads(wls):
+def plot_workloads(wls, perrow=4, **kwargs):
   qs = [[q[0] for q in wl.queries] for wl in wls]
-  try:
-    maxy = max(max(q) for i, q in enumerate(qs) if type(wls[i]) != ZipfWorkload)
-  except:
-    pass
+  maxys = defaultdict(int)
+  for i, q in enumerate(qs):
+    maxys[type(wls[i])] = max(maxys[type(wls[i])], max(q))
   maxx = len(qs[0])
-  with figure_grid(1, len(wls)) as grid:
+  with figure_grid(len(wls)//perrow+len(wls)%perrow, perrow, **kwargs) as grid:
     for q, wl, ax in zip(qs, wls, grid.each_subplot()):
       plt.title(wl.title())
       plt.xlim(0, maxx)
       if type(wl) == ZipfWorkload:
         plt.yscale("log")
       else:
-        plt.ylim(0, maxy)
+        plt.ylim(0, maxys[type(wl)])
       qs = list(enumerate(wl.queries))
       read_x = [i for i, x in qs if x[1] == 0]
       read_y = [x[0] for _, x in qs if x[1] == 0]

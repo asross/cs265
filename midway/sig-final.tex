@@ -23,33 +23,43 @@ A. Sophie Hilgard\\
 \maketitle
 
 \section{Introduction}
+
 Tuning data systems is hard. Even for systems like key-value stores that only
 support the most minimal API (\texttt{put} and \texttt{get}), the possibilities
 are often overwhelming. The developers of RocksDB \cite{facebook:rocksdb}, a
-popular and powerful key-value store, freely admit that ``configuring RocksDB
-optimally is not trivial,'' and that ``even [they] as RocksDB developers don't
-fully understand the effect of each configuration change''
-\cite{rocksdb-tuning-guide}. Additionally, the optimality of a database configuration
-depends on that database's \textit{workload}, which is rarely known in advance.
-There has been recent work \cite{monkey} in
-determining the optimal memory allocation for bloom filters in terms of
-worst-case analysis and with respect to a number of basic workloads, but
-realistic key-value store workloads, which have been analyzed e.g. for Facebook
-\cite{characterizing-memcached}, exhibit enormous complexity with respect to
-time, skewness, and key repeatability.
+popular and powerful LSM tree-based key-value store, freely admit that
+``configuring RocksDB optimally is not trivial,'' and that ``even [they] as
+RocksDB developers don't fully understand the effect of each configuration
+change'' \cite{rocksdb-tuning-guide}. Additionally, the optimality of a
+database configuration depends on that database's \textit{workload}, which is
+rarely known in advance.  There has been recent work \cite{monkey} in
+determining the optimal memory allocation for bloom filters in LSM trees in
+terms of worst-case analysis and with respect to a number of basic workloads,
+but realistic key-value store workloads, which have been analyzed e.g. for
+Facebook \cite{characterizing-memcached}, exhibit enormous complexity with
+respect to time, skewness, and key repeatability.
 
 Our goal is somewhat ambitious -- we seek to optimize not just bloom filter
-memory allocation but memory allocation across the entire key-value store (to
-cache, memtable, bloom filters), and to do it
-with respect to workloads we model as stochastic processes.
+memory allocation but memory allocation across the entire LSM tree; that is,
+given a total amount of memory $M$, we want to choose an amount of cache memory
+$M_{cache}$, buffer/memtable memory $M_{table}$, and bloom filter memory
+$M_{bloom}$ such that $M=M_{cache}+M_{table}+M_{bloom}$ and disk accesses
+across the LSM tree are minimized. Furthmore, we want to perform this
+optimization with respect to a diverse set of workloads that we model as
+stochastic processes.
 
-\section{Workloads}
+\section{Stochastic Workloads}
 
-Here are a number of basic workloads we will use to generate queries to
-benchmark our key-value store. We include many workloads that are standard in
-the literature as well as more complex workloads (inspired by
-\cite{characterizing-memcached} and \cite{linkbench}) that attempt to more
-accurately mimic realistic settings.
+To benchmark our results, rather than generating workloads which are fixed sets
+of queries, we define a diverse set of random workload generating classes.
+Each class is highly configurable and some include hierarchical probabilistic
+modeling.  From them, we randomly regenerate workloads with similar high-level
+characteristics but different queries. This strategy does not necessarily
+guarantee realism but helps us avoid "overfitting" to a particular set of
+queries. The workloads we define contain many simple distributions that are
+standard in the literature, along with more complex, time-varying workloads
+(inspired by \cite{characterizing-memcached} and \cite{linkbench}) that attempt
+to mimic more realistic settings.
 
 \subsection{Simple workloads}
 
@@ -81,15 +91,23 @@ For all the above queries, when we draw a particular key for the first time, we
 will insert it into the database as a write, and subsequently we will either
 look it up or update it with probability $w$.
 
-Examples of these workloads can be seen in Figure \ref{fig:simple-workloads}.
+Examples of these workloads can be seen in the first row of Figure
+\ref{fig:workloads}.
 
-\begin{figure}[!htb]
+\begin{figure*}[!htb]
 \begin{center}
-\includegraphics[width=0.5\textwidth]{basic-workloads.png}
+\includegraphics[width=\textwidth]{workloads.png}
 \end{center}
-\caption{Hey!}
-\label{fig:simple-workloads}
-\end{figure}
+\caption{Example workloads we generated for benchmarking. The first row
+  contains simple workloads where the distribution of key popularities does not
+  change over time, and where the read/write ratio is a uniform probability.
+  The second row contains Discover-Decay workloads, which add/read/update keys
+  according to Poisson processes and simulate popularity decays over time. The
+  third row is a modified version of Discover-Decay that adds a periodic signal
+  to the decaying popularity with a configurable period and cusp sharpness. Blue
+  dots represent reads and green dots represent writes or updates.}
+\label{fig:workloads}
+\end{figure*}
 
 \subsection{Complex workloads}
 
@@ -109,39 +127,27 @@ Poisson processes are a reasonable choice for modeling the arrivals of database
 queries or in general the number of events that occur in a continuous time
 interval, and have been shown to be appropriate for database queries
 \cite{poisson-db1,poisson-db2,poisson-db3}; they are the model that emerges
-naturally if we make no special assumptions (i.e. maximum entropy) about the
+if we make no special assumptions (i.e. maximum entropy) about the
 length of time between queries.  A more realistic model might increase and
-lower the rate to mimic the diurnal, weekly, and annual cycles seen in
+lower the rate to mimic the diurnal and weekly cycles seen in
 \cite{characterizing-memcached}, but especially on short timescales, Poisson
 processes should be much more realistic than assuming a uniform arrival rate
-(which we used above).
+(which we did above).
 
 Once we've drawn our $n_w$ new keys $k_i$, we assign them an initial popularity
-
 $$
 \theta_{i} \sim \textrm{Beta}(a_\theta,b_\theta)
 $$
-
-with a random decay rate
-
+\noindent with a random decay rate
 $$
-\gamma_i \sim \textrm{Beta}(a_\gamma,b_\gamma)
+\gamma_i \sim \textrm{Beta}(a_\gamma,b_\gamma),
 $$
-
 which is the factor by which they exponentially decay each subsequent time
 step. At any time $t$, the popularity of each key is given by $p(k_i,t) \propto
 \theta_i\gamma_i^{t-t_i}$, where $t_i$ is when the key was inserted. We use
 these time-dependent popularities to draw each of our $n_r$ reads and $n_u$
 updates from $\textrm{Mult}(\{p(k_i,t)\})$. Examples can be seen in Figure
-\ref{fig:discover-decay}.
-
-\begin{figure}[!htb]
-\begin{center}
-\includegraphics[width=0.5\textwidth]{discover-decay.png}
-\end{center}
-\caption{Ho!}
-\label{fig:discover-decay}
-\end{figure}
+\ref{fig:workloads}.
 
 \textbf{Periodic Decay} workloads are a simple modification of the
 Discover-Decay model where $p(k_i,t)$ now depends not only on the decay rate
@@ -151,16 +157,19 @@ the combination of exponential decay and sharp periodic peaking we see in
 Figure \ref{fig:memcached-decay}), we multiply $\theta_i\gamma_i^{t-t_i}$ by an
 inverse cycloid function with period $T$, clamped from 0 to 1, and taken to a
 configurable power (to make the cusps sharper or duller) that we call the
-cycloid's \texttt{cuspity}. Examples can be seen in Figure
-\ref{fig:periodic-decay}.
+cycloid's \texttt{cuspity}. Examples can be seen in row 3 of Figure
+\ref{fig:workloads}.
 
-% include graphics
 \begin{figure}[!htb]
 \begin{center}
-\includegraphics[width=0.5\textwidth]{periodic-decay.png}
+\includegraphics[width=0.5\textwidth]{cuspity.png}
 \end{center}
-\caption{Hiya!}
-\label{fig:periodic-decay}
+\caption{Key reuse histogram from \cite{characterizing-memcached} showing the
+  popularity of keys requested multiple times as a function of the number of
+  hours since the previous access for a number of real key-value store
+  workloads from Facebook. Note the overall trend of exponential decay with a
+  sharply period subsignal on the hour scale (for most workloads).}
+\label{fig:memcached-decay}
 \end{figure}
 
 \section{The best allocation depends on the workload}
