@@ -549,15 +549,14 @@ results for cache, bloom filters, and the buffer on three distinct workloads.}
 There is a large amount of variance in the simulated results, both because of
 randomness in the separate instantiations of the workload and randomness in
 the execution of its queries, but for the most part, our estimates of the average
-savings are both precise and accurate.
+savings are both precise and accurate. There is a slight deviation for the uniform
+memtable savings calculation, but the variance is so high that it does not appear
+to be significant.
 
-We do see what appears to be systematic bias in our estimate of the
-Discover-Decay memtable savings. This discrepancy may because we do not
-properly account for the effects of duplicates in the memtable savings
-calculation, which are frequent in this workload, but we do not have a complete
-explanation yet. Future work should attempt to resolve this issue, although the
-estimate still appears to be reasonably accurate relative to the differences
-between component gradients.
+The fact that our estimates of the expected I/O savings are so precise across
+workloads gives us confidence first that our simulation and modeling are correct,
+and second that they will generalize to more complex, real-world workloads
+with more queries and keys.
 
 \section{Database Gradient Descent}
 
@@ -566,46 +565,71 @@ evaluate all three of them at every grid point along the simplex of simulated
 LSM trees with constant total memory. We then overlay an arrow on top of the
 disk access contour plot pointing from the lowest gradient component to the
 highest gradient component (signifying that our method suggests moving 8 bytes
-from one component to the other). We can then visually inspect these arrows and
-see if they generally point us to regions of low disk accesses.
+from one component to the other). Finally, for each grid location, we follow
+the arrows until we either reach the edge of the simplex or a point we have
+already reached.  We then plot an orange dot. This process simulates what would
+occur in a discrete, stochastic form of gradient descent. To evaluate how well
+our adaptive optimization procedure would work, we can visually inspect the
+orange dots, the arrows, and the yellow dot (signifying the experimental global
+minimum) and see how well they agree.
 
 Results for basic workloads can be seen in Figure \ref{fig:basicquiv}.
 
 \begin{figure}[H]
 \begin{center}
-%\includegraphics[width=0.5\textwidth]{uniformquiv1.png}
+\includegraphics[width=0.5\textwidth]{uniformquiv1.png}
 \includegraphics[width=0.5\textwidth]{robinquiv1.png}
-\includegraphics[width=0.5\textwidth]{eightwenquiv1.png}
+\includegraphics[width=0.5\textwidth]{eightwenquiv2.png}
 \end{center}
-\caption{Round-Robin and Eighty-Twenty simulation results overlaid with gradient estimates. Following gradients reliably leads to a good configuration, although we tend to undervalue the cache relative to the buffer.}
+\caption{Uniform, Round-Robin, and Eighty-Twenty simulation results overlaid with
+gradient estimates. Following gradients reliably leads to a good configuration.}
 \label{fig:basicquiv}
 \end{figure}
 
-The optimization landscape is again generally non-convex, but Monkey improves both absolute performance and convexity, and following gradient estimates leads us close to the global minimum (perhaps slightly undervaluing the cache). For Zipf workloads in Figure \ref{fig:zipfquiv}, however, we do reach a cache-centric minimum by following gradients.
+Discontinuities in the number of layers as we vary the buffer size makes the
+optimization non-convex, but Monkey improves both absolute performance and
+convexity. The arrows track the underlying contours remarkably well, and
+following gradient estimates leads us to the global minimum in every case
+except the uniform baseline.
 
 \begin{figure}[H]
 \begin{center}
 \includegraphics[width=0.5\textwidth]{zipfquiv1.png}
 \includegraphics[width=0.5\textwidth]{zipfquiv2.png}
 \end{center}
-\caption{Zipf simulation results overlaid with gradient estimates for $s=1.1$ (lightly skewed) and $s=1.5$ (highly skewed).}
+\caption{Zipf simulation results overlaid with gradient estimates for $s=1.1$
+(lightly skewed) and $s=1.5$ (highly skewed).}
 \label{fig:zipfquiv}
 \end{figure}
 
-As we increase the Zipf skewness $s$, we observe a qualitative change in both our simulated results and estimated gradients. At low $s$, the best configuration is a mixture of mostly Bloom filter and cache memory with a relatively small buffer, while at high $s$, Bloom filters are less useful and it is better to allocate more memory to the buffer. This effect may be due to the fact for less skewed workloads, we are more likely to request unpopular keys which may be buried deep in the tree (for which we need Bloom filters), but for highly skewed workloads, we obtain better write and read savings by using the buffer as kind of an auxiliary cache.
-
-For Discover-Decay workloads (Figure \ref{fig:discdecquiv}), we observe a similar transition to the Zipf behavior as we vary skewness, but with a shifted balance between the cache and the buffer (because we have much more frequent inserts and updates). Again, we reliably find a good local or global minimum following gradient estimates.
+The results for Zipf workloads in Figure \ref{fig:zipfquiv} look quite
+different, but we are also generally able to reach the global minimum, at least
+in the Monkey case. As we increase the skewness parameter $s$, we observe a
+qualitative change in both our simulated results and estimated gradients. At
+low $s$, the best configuration is a mixture of mostly Bloom filter and cache
+memory with a relatively small buffer, while at high $s$, Bloom filters are
+less useful and it is better to allocate more memory to the buffer. This effect
+may be due to the fact for less skewed workloads, we are more likely to request
+unpopular keys which may be buried deep in the tree (for which we need Bloom
+filters), but for highly skewed workloads, we obtain better write and read
+savings by using the buffer as kind of an auxiliary cache.
 
 \begin{figure}[!htb]
 \begin{center}
-\includegraphics[width=0.5\textwidth]{discdecquiv1.png}
 \includegraphics[width=0.5\textwidth]{discdecquiv2.png}
+\includegraphics[width=0.5\textwidth]{discdecquiv1.png}
 \end{center}
-\caption{Discover-Decay simulation results overlaid with gradient estimates for $\gamma\sim\text{Beta}(100,1)$ (lightly skewed) and $\gamma\sim\text{Beta}(2,1)$ (highly skewed).}
+\caption{Discover-Decay simulation results overlaid with gradient estimates for
+$\gamma\sim\text{Beta}(100,1)$ (lightly skewed) and
+$\gamma\sim\text{Beta}(2,1)$ (highly skewed).}
 \label{fig:discdecquiv}
 \end{figure}
 
-Finally, returning to the Periodic Decay workloads, we find that gradients more or less capture the behavior we noted near the beginning of the paper. For lower effective numbers of popular keys (but high temporal locality), we tend to end up allocating most of our memory to the buffer and none to the bloom filters, but as our ``working set'' expands, we are pushed closer to the center of the graph. In the bottom row, the multimodality of the landscape is somewhat visible in the gradient estimates as well.
+For Discover-Decay workloads (Figure \ref{fig:discdecquiv}), we observe a
+similar transition (as with Zipfs) as we vary skewness, but with a shifted
+balance between the cache and the buffer (because we have much more frequent
+inserts and updates). Again, we reliably find a good local or global minimum
+following gradient estimates.
 
 \begin{figure}[!htb]
 \begin{center}
@@ -617,16 +641,82 @@ Finally, returning to the Periodic Decay workloads, we find that gradients more 
 \label{fig:periodquiv}
 \end{figure}
 
-\section{Future Work}
+Finally, returning to the Periodic Decay workloads, we find that gradients more
+or less capture the behavior we noted near the beginning of the paper. For
+lower effective numbers of popular keys (but high temporal locality), we tend
+to end up allocating most of our memory to the buffer and none to the bloom
+filters, but as our ``working set'' expands, we are pushed closer to the center
+of the graph. In the bottom row, gradient descent is drawn into two distinct
+modes based on the starting location, suggesting that our gradient estimations
+are high-resolution enough to capture the nonconvexity. In general (thanks to
+Niv Dayan for this insight as well as many others in this paper), there are
+many situations in which increasing either the buffer or the bloom filter will
+reduce I/Os, so we should expect multiple locally optimal allocation strategies
+to exist.
 
-There are many additional optimizations we chose not to address for the moment in this problem. For example, what is the optimal time to reallocate memory? In an environment where we assume full flushing of a given layer and the recomputation of all bloom filters for the layers involved in the flush, it seems like this would be an optimal point to reallocate memory locally among the data structures that are being rewritten anyway. However, this leads to only rare opportunities to recompute deeper layers of the LSM tree, and in practice LSM tree layers are not actually flushed in this `all-at-once' fashion. 
+\section{Conclusions and Future Work}
 
-Additionally, the equivalent to a stochastic gradient descent learning rate for our problem is the chunk size of memory that we allow to be reallocated at any calculation point. For now, we consider only the reallocation of the smallest available piece of memory. However, in situations where we have a large amount of conviction in the predictions and they show large potential gains, it might make more sense to reallocate a large block of memory at once. In this case, the reallocation strategy requires more thought than merely taking a chunk from the lowest value data structure and giving it to the highest value data structure. Optimally computing what that reallocation strategy would be would likely require a deeper set of statistics, showing a trend of value over the last portion of any of the data structures, rather than only the last key as we have been using.
+In this paper, we have used both simulation and modeling to analyze how LSM
+trees perform under a variety of memory allocations and stochastic workloads.
+In particular, we have shown that the optimal allocation of memory between the
+LSM tree's cache, buffer, and bloom filters strongly depends on the workload,
+although we have independently verified the conclusions of Monkey \cite{monkey}
+that \textit{given} a total amount of bloom filter memory, there is a unique
+optimal allocation of it across bloom filters.
 
-Further, we see in the buffer savings that relative sizes of memory access can affect the total I/O savings. In the end, it would be important to consider how the difference in sizes between cache lines, pages on disk, and possibly read chunk sizes from flash would affect the optimal sizing of the memory chunks.
+Additionally, we derived formulas for the expected I/O savings if we increase
+the memory in any component of the LSM tree, along with methods of accurately
+estimating these savings without using almost any additional memory. We used
+these estimates to implement a discrete form of stochastic gradient descent for
+database parameters, and showed that although the optimization problem is
+sometimes non-convex, we can usually reach a very good optimum.
 
-Building on the above, there are a number of opportunities for storing histograms rather than simple rolling averages of statistics (in particular, we store a histogram of bloom filter accesses at each stage of bloom filter `fullness' to allow us to calculate the average false positive rate for any number of bits after the fact rather than rolling averages of expected false positive rates for a few potential memory allocations). Histograms are a much heavier statistic than a simple number but provide a greater flexibility in the reallocation stage. More work needs to be done to calculate how much added benefit could be achieved in practice from these costlier statistics and to find scenarios in which they might be worthwhile.
+As a first next step, we should verify these theoretical and simulated results
+by testing against a real LSM tree implementation such as RocksDB or LevelDB.
+We should also see if we can improve the precision of our gradient estimates by
+storing additional statistics. For example, there are a number of cases where
+we take rolling averages, but could replace them with histograms instead (in
+particular, we found it convenient to store a histogram of bloom filter lengths
+at each access to allow us to calculate the average false positive rate for any
+number of bits after the fact rather than rolling averages of expected false
+positive rates for a few potential memory allocations). Histograms are a much
+heavier statistic than a simple number but provide a greater flexibility in the
+reallocation stage. More work needs to be done to calculate how much added
+benefit could be achieved in practice from these costlier statistics and to
+find scenarios in which they might be worthwhile.
 
+Additionally, we have not developed a strategy for how to best use our gradient
+estimates to adaptively change the database in real time.  For example, how
+many queries do we need to see before our gradient estimates become accurate,
+and what is the optimal time/threshold for reallocating memory? In an
+environment where we assume full flushing of a given layer and the
+recomputation of all bloom filters for the layers involved in the flush, it
+seems like this would be an optimal point to reallocate memory locally among
+the data structures that are being rewritten anyway. However, this leads to
+only rare opportunities to recompute deeper layers of the LSM tree, and in
+practice LSM tree layers are not actually flushed in this `all-at-once'
+fashion. A fully fleshed-out policy would need to model the cost of
+reallocating memory and restructuring the tree alongside our noisy estimates of
+the gain, ideally using decision-theoretic metrics, to evaluate exactly when
+and what we should change.
+
+Additionally, just as with gradient descent on continuous loss functions, we
+need to choose a learning rate, which in this case corresponds to how much
+memory we should reallocate between components. In this paper, we only
+considered reallocating the smallest available piece of memory. However, in
+situations where we have a large amount of conviction in the predictions and
+they show large potential gains, it might make more sense to reallocate a large
+block of memory at once, which would help us reach the optimal configuration
+faster and with fewer restructuring overheads. However, too large a step size
+might make the optimization procedure less stable and even result in worse
+performance, at least transiently. More work in modeling, simulation, and
+experiment is needed to determine a fast but safe descent schedule.
+
+Finally, we saw in our buffer savings calculation that relative sizes of memory
+access (i.e. pages) can affect the total I/O savings. In the end, it would be
+important to consider how the difference in sizes between cache lines, pages on
+disk, and possibly read chunk sizes from flash would affect our estimates and
+the optimal allocations.
 
 \bibliographystyle{abbrv}
 \small
