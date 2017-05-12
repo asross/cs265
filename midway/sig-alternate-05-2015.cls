@@ -231,7 +231,7 @@
                                         % top of first footnote.
 \floatsep 11pt plus 2pt minus 2pt       % Space between adjacent floats moved
                                         % to top or bottom of text page.
-\textfloatsep 18pt plus 2pt minus 4pt   % Space between main text and floats
+\textfloatsep 11pt plus 2pt minus 4pt   % Space between main text and floats
                                         % at top or bottom of page.
 \intextsep 11pt plus 2pt minus 2pt      % Space between in-text figures and
                                         % text.
