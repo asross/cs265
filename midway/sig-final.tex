@@ -398,7 +398,7 @@ Taking the derivative with respect to the number of entries in the cache,
 $M_c/E$, we get 
 
 $$
-- p(L_i)/(N - BP) \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right]
+\sum_{i=1}^{L}  -(1-p_{null}) p(L_i)/(N - BP) \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right]
 $$
 
 Which is just the average cost of a read throughout the tree. Then, to keep
@@ -494,9 +494,11 @@ The correct way to handle the duplicates requires somewhat more consideration, b
 
 \subsection{Estimating Statistics with $O(1)$ Memory}
 
-\textbf{Cache:} to estimate the number
+\textbf{Cache:} to estimate the number of disk accesses we will save by adding $dM$ extra bits of memory to the cache, we let consider $dM$ as a number of extra entries in the cache. That is, we calculate the savings from having $dM/E$ extra cache entries available. As mentioned above, the relevant statistic here is the average cost of a read in the database. To calculate this, we collect statistics on the total number of disk accesses and total number of queries. The expected cost per query is then the number of disk accesses over the window divided by the total number of queries. To approximate the probability of the item being in the cache times the number of queries, we maintain a statistic for the number of times the last cache slot was accessed during the window of interest and make the assumption that the number of hits on the next marginal slot(s) would be approximately the same. Then we can calculate the final expected I/O savings as
 
-\textbf{Bloom Filters:} to estimate the number of disk accesses we will save by adding $dM$ extra bits of memory to the bloom filters, we first decide how to allocate that $M'_{bloom} = M_{bloom}+dM$ bits using Monkey or the baseline allocation, giving us $m_i$ and $m'_i$ bits per bloom filter on each layer. At each layer $i$, for both $m_i$ and $m'_i$, we update rolling averages of the theoretical false positive rate $\hat{fp}_i = \mathbb{E}\left[0.6185^{\frac{m_i}{n_i}}\right]$ and $\hat{fp}'_i = \mathbb{E}\left[0.6185^{\frac{m'_i}{n_i}}\right]$ every time the bloom filter is queried (where $n_i$ is constantly changing based on insertions and flushes of the filter). These statistics (individual floats) give us an estimate of the aggregate false positive rate at $m_i$ and $m'_i$ robust to changing layer fullness. Finally, we keep a counter $n_{i,\text{bloom false}}$ of the number of times requested items are \textit{not} in bloom filter $i$. This counter is incremented either when the bloom filter returns false (which we know immediately) or returns a false positive (which we can record after fruitlessly searching the layer). This counter allows us to estimate disk accesses resulting from our current or altered false positive rates. The final savings is therefore \[
+$$dM/E * E[hits] * E[cost/query]$$
+
+\textbf{Bloom Filters:} To estimate the number of disk accesses we will save by adding $dM$ extra bits of memory to the bloom filters, we first decide how to allocate that $M'_{bloom} = M_{bloom}+dM$ bits using Monkey or the baseline allocation, giving us $m_i$ and $m'_i$ bits per bloom filter on each layer. At each layer $i$, for both $m_i$ and $m'_i$, we update rolling averages of the theoretical false positive rate $\hat{fp}_i = \mathbb{E}\left[0.6185^{\frac{m_i}{n_i}}\right]$ and $\hat{fp}'_i = \mathbb{E}\left[0.6185^{\frac{m'_i}{n_i}}\right]$ every time the bloom filter is queried (where $n_i$ is constantly changing based on insertions and flushes of the filter). These statistics (individual floats) give us an estimate of the aggregate false positive rate at $m_i$ and $m'_i$ robust to changing layer fullness. Finally, we keep a counter $n_{i,\text{bloom false}}$ of the number of times requested items are \textit{not} in bloom filter $i$. This counter is incremented either when the bloom filter returns false (which we know immediately) or returns a false positive (which we can record after fruitlessly searching the layer). This counter allows us to estimate disk accesses resulting from our current or altered false positive rates. The final savings is therefore \[
   \text{Savings}(M'_{bloom}) = \sum_{i} (\hat{fp}'_i - \hat{fp}_i) * n_{i,\text{bloom false}},
 \]
 
@@ -513,7 +515,19 @@ Note that because we can obtain these estimates on a layer-by-layer basis, we ca
 \label{fig:bloom-realloc}
 \end{figure}
 
-\textbf{Buffer:}
+\textbf{Buffer:} To estimate the number of disk accesses we will save in reads by adding $dM$ extra bits of memory to the buffer, we use statistics maintained on the total bloom filter accesses per layer, bloom filter false positives per layer, and hits per layer. We estimate the expected
+additional number of hits on any given layer as the original hits times the new theoretical size divided by the actual original size.
+That is, the number of extra hits is equal to $$new\_hits_{i} = hits_{i} * \frac{size_{i} + dM*T^{i} }{ size_{i}}$$
+For each expected hit, we have an I/O savings equal to the false positive rate on the bloom filter of that layer, as described in the previous section. To calculate this for a layer $i$, we use 
+$$E[savings/hit]_{I} = \frac{false\_positives_{i}}{bloom\_accesses_{i}}$$
+Then the total number of I/Os saved should be 
+$$
+\sum_{i=0}^L new\_hits_{i} * E[savings/hit]_{i} 
+$$
+where for layer 0, the buffer, the $E[savings/hit] = 1$, as the access cost at L1 is always exactly 1 and the access cost at 
+the buffer is always 0.
+
+To estimate the number of disk accesses we will save in writes/updates by adding $dM$ extra bits of memory to the buffer, 
 
 \subsection{Testing Accuracy and Variance of Statistics}
 
