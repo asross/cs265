@@ -492,8 +492,6 @@ Further, when computing read and write I/Os during merging, we expect that numbe
 The correct way to handle the duplicates requires somewhat more consideration, but the only statistics we are currently using The are the empirical number of update queries and the empirical number of duplicates found and removed on each layer over the window of interest.
 
 
-\section{Database Stochastic Gradient Descent}
-
 \subsection{Estimating Statistics with $O(1)$ Memory}
 
 \textbf{Cache:} to estimate the number
@@ -547,7 +545,7 @@ explanation yet. Future work should attempt to resolve this issue, although the
 estimate still appears to be reasonably accurate relative to the differences
 between component gradients.
 
-\subsection{Results: Database Gradient Descent in Practice}
+\section{Database Gradient Descent}
 
 Now that we have validated the accuracy of our basic gradient estimates, we
 evaluate all three of them at every grid point along the simplex of simulated
