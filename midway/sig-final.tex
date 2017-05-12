@@ -528,6 +528,15 @@ where for layer 0, the buffer, the $E[savings/hit] = 1$, as the access cost at L
 the buffer is always 0.
 
 To estimate the number of disk accesses we will save in writes/updates by adding $dM$ extra bits of memory to the buffer, 
+we maintain statistics on total number of entries that passed through any given layer, number of duplicates removed at any given layer, and number of entries in any given layer at the end of the period. For a workload without duplicates, we can simply
+use these statistics to deterministically calculate the final allocation and number of read and write I/Os that would have
+occurred throughout the process for a second tree with buffer size + $dM$, calculating every batch of read and write merges and summing over the number of pages that would have been involved. For the original tree we can either use statistics on empirical I/Os during the merging process or use the same deterministic formula to calculate what they would have been. The expected saved I/Os then is simply
+
+$$cost_{tree} - cost_{tree+dM}$$
+
+When we consider duplicates, the estimate becomes much more noisy. To consider the effect of duplicates on reducing the total number of pages read and written during the merging process, we reduce the number of entries that pass through each layer of our theoretical larger tree by the percentage of duplicates removed at each layer, calculated as $$\frac{duplicates\_removed_{i}}{total\_entries_{i}}$$
+This then changes the final layer structure of the estimated tree. We also consider that duplicates should reduce the total number of entries written and then read after two segments are merged together. Then for those read and write components that occur on an already half-filled layer, we reduce the number of elements by multiplying by $$1 - \frac{duplicates\_removed_{i}}{total\_entries_{i}}$$
+This will reduce the total I/Os by number of page reads it makes unnecessary. With this adjusted cost for the larger tree, we again calculate the expected saved I/Os as the estimated I/Os of the hypothetical larger tree subtracted from the empirical or theoretical I/Os of the existing tree.
 
 \subsection{Testing Accuracy and Variance of Statistics}
 
