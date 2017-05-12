@@ -67,7 +67,7 @@ of queries, we define a diverse set of random workload generating classes.
 Each class is highly configurable and often hierarchical in their probabilistic
 models.  From them, we randomly regenerate workloads with similar high-level
 characteristics but different queries. This strategy does not necessarily
-guarantee realism but helps us avoid "overfitting" to a particular set of
+guarantee realism but helps us avoid ``overfitting'' to a particular set of
 queries. The workloads we define contain many simple distributions that are
 standard in the literature, along with more complex, time-varying workloads
 (inspired by \cite{characterizing-memcached} and \cite{linkbench}) that attempt
@@ -721,14 +721,26 @@ might make the optimization procedure less stable and even result in worse
 performance, at least transiently. More work in modeling, simulation, and
 experiment is needed to determine a fast but safe descent schedule.
 
+A slightly more far-fetched idea would be to move away from local optimization
+altogether by determining richer ways of statistically characterizing
+workloads.  For example, we interpreted many of our results, anecdotally, by
+describing the ``temporality'' of a workload or the size of its ``working set''
+of keys accessed at any given time. It may be possible that the optimal memory
+allocation of an LSM tree is a simple, deterministic function of statistically
+estimable quantities that correspond to these ad-hoc characterizations. If that
+is the case, then we could do online analysis of the workload once then jump
+directly to the optimal configuration.
+
 Finally, we saw in our buffer savings calculation that relative sizes of memory
 access (i.e. pages) can affect the total I/O savings. In the end, it would be
 important to consider how the difference in sizes between cache lines, pages on
 disk, and possibly read chunk sizes from flash would affect our estimates and
-the optimal allocations.
+the optimal allocations. We should also consider fence pointers.
+
+\paragraph{Acknowledgements}
+Thanks to Niv Dayan for many helpful suggestions and insights.
 
 \bibliographystyle{abbrv}
-\small
 \bibliography{bibliography}
 
 \end{document}
