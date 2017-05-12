@@ -80,12 +80,21 @@ class Layer(LSMComponent):
     if not kids:
       return 0
     lower_layer_disks = sum([l.accesses for l in kids])
-    lower_layer_gets = sum([l.gets for l in kids])
+    lower_layer_gets = sum([l.n_gets for l in kids])
+    if not lower_layer_disks:
+      return 0
     old_hits = self.hits
     new_hits = self.hits * (M+dM) / M
     extra_hits = new_hits - old_hits
     savings = extra_hits * (lower_layer_disks / lower_layer_gets)
     return savings + self.child.read_savings(dM * self.ratio)
+
+  @property
+  def n_gets(self):
+    try:
+      return self.gets
+    except:
+      return sum(self.bloom.lengths.values())
 
   def get(self, key):
     was_accessed = (self.bloom is None or self.bloom.get(key))

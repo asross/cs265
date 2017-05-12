@@ -457,33 +457,75 @@ interest.
 
 \subsection{Testing Accuracy and Variance of Statistics}
 
+To confirm that our estimates are reasonable, we ran 250 simulations for three
+separate workloads and compared our estimates of each gradient to the actual
+savings for a separate tree with 8 bytes of extra memory in the corresponding
+LSM component (against which we ran the same workload). Results can be seen in
+Figure \ref{fig:savings}.
+
 \begin{figure*}[!htb]
 \begin{center}
 \includegraphics[width=\textwidth]{all-savings.png}
 \end{center}
 \caption{Light-footprint statistical estimations of the gradient vs. simulated
 results for cache, bloom filters, and the buffer on three distinct workloads.}
-\label{fig:period-lsmulations}
+\label{fig:savings}
 \end{figure*}
 
-First we generate a variety of workloads against which to test the accuracy of
-our statistics in predicting the change in I/Os for increasing the memory
-allocated to a given data structure. In this context, we hold all other data
-structures constant and increase the total memory by one entry (64 bits), which
-we give to the data structure being analyzed.
+There is a large amount of variance in the simulated results, both because of
+randomness in the separate instantiations of the workload and randomness in
+the execution of its queries, but for the most part, our estimates of the average
+savings are both precise and accurate.
 
-Results show wide dispersion around the predicted number of I/Os, which
-generally falls at or around the mean of the distribution.
+We do see what appears to be systematic bias in our estimate of the
+Discover-Decay memtable savings. This discrepancy may because we do not
+properly account for the effects of duplicates in the memtable savings
+calculation, which are frequent in this workload, but we do not have a complete
+explanation yet. Future work should attempt to resolve this issue, although the
+estimate still appears to be reasonably accurate relative to the differences
+between component gradients.
 
-\subsection{Testing Theoretical I/O Savings Against Simulation}
+\subsection{Results: Database Gradient Descent in Practice}
 
-To test whether basic statistics are capable of accurately predicting proper
-memory reallocation based on workload, we add statistic collection for the
-statistics mentioned above to the simulator. Then, for points on the
-precomputed surface, we see what the expected I/Os would have been and what
-memory the heuristics above would have directed us to reallocate.
+Now that we have validated the accuracy of our basic gradient estimates, we
+evaluate all three of them at every grid point along the simplex of simulated
+LSM trees with constant total memory. We then overlay an arrow on top of the
+disk access contour plot pointing from the lowest gradient component to the
+highest gradient component (signifying that our method suggests moving 8 bytes
+from one component to the other). We can then visually inspect these arrows and
+see if they generally point us to regions of low disk accesses.
 
-\section{Results}
+\begin{figure}[!htb]
+\begin{center}
+\includegraphics[width=0.5\textwidth]{eightwenquiv1.png}
+\includegraphics[width=0.5\textwidth]{robinquiv1.png}
+\includegraphics[width=0.5\textwidth]{uniformquiv1.png}
+\includegraphics[width=0.5\textwidth]{zipfquiv1.png}
+\includegraphics[width=0.5\textwidth]{zipfquiv2.png}
+\end{center}
+\caption{Holy guacamole.}
+\label{fig:basicquiv}
+\end{figure}
+
+\begin{figure}[!htb]
+\begin{center}
+\includegraphics[width=0.5\textwidth]{discdecquiv1.png}
+\includegraphics[width=0.5\textwidth]{discdecquiv2.png}
+\end{center}
+\caption{Discover-Decay.}
+\label{fig:discdecquiv}
+\end{figure}
+
+\begin{figure}[!htb]
+\begin{center}
+\includegraphics[width=0.5\textwidth]{periodquiv1.png}
+\includegraphics[width=0.5\textwidth]{periodquiv2.png}
+\includegraphics[width=0.5\textwidth]{periodquiv3.png}
+\end{center}
+\caption{Periodic Decay.}
+\label{fig:periodquiv}
+\end{figure}
+
 
 \section{Future Work}
 There are many additional optimizations we chose not to address for the moment in this problem. For example, what is the optimal time to reallocate memory? In an environment where we assume full flushing of a given layer and the recomputation of all bloom filters for the layers involved in the flush, it seems like this would be an optimal point to reallocate memory locally among the data structures that are being rewritten anyway. However, this leads to only rare opportunities to recompute deeper layers of the LSM tree, and in practice LSM tree layers are not actually flushed in this `all-at-once' fashion. 

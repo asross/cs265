@@ -62,7 +62,7 @@ class LSMulator():
     return dM * (self.cache.last_slot_hits*p + self.cache.penultimate_hits*(1-p)) * (self.disk_accesses / self.layer_queries)
 
   def bigger_memtbl_savings(self, dM=1):
-    return self.estimated_memtbl_read_savings(dM) + self.estimated_memtbl_write_savings(dM)
+    return self.estimated_memtbl_read_savings(dM) #+ self.estimated_memtbl_write_savings(dM)
 
   def bigger_bloom_savings(self, dM=1, ballocs=monkey_assignment, bits_per_key=64):
     bc = np.array([l.bloom.bit_length for l in self.layers])
