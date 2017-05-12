@@ -496,6 +496,27 @@ The correct way to handle the duplicates requires somewhat more consideration, b
 
 \subsection{Estimating Statistics with $O(1)$ Memory}
 
+\textbf{Cache:} to estimate the number
+
+\textbf{Bloom Filters:} to estimate the number of disk accesses we will save by adding $dM$ extra bits of memory to the bloom filters, we first decide how to allocate that $M'_{bloom} = M_{bloom}+dM$ bits using Monkey or the baseline allocation, giving us $m_i$ and $m'_i$ bits per bloom filter on each layer. At each layer $i$, for both $m_i$ and $m'_i$, we update rolling averages of the theoretical false positive rate $\hat{fp}_i = \mathbb{E}\left[0.6185^{\frac{m_i}{n_i}}\right]$ and $\hat{fp}'_i = \mathbb{E}\left[0.6185^{\frac{m'_i}{n_i}}\right]$ every time the bloom filter is queried (where $n_i$ is constantly changing based on insertions and flushes of the filter). These statistics (individual floats) give us an estimate of the aggregate false positive rate at $m_i$ and $m'_i$ robust to changing layer fullness. Finally, we keep a counter $n_{i,\text{bloom false}}$ of the number of times requested items are \textit{not} in bloom filter $i$. This counter is incremented either when the bloom filter returns false (which we know immediately) or returns a false positive (which we can record after fruitlessly searching the layer). This counter allows us to estimate disk accesses resulting from our current or altered false positive rates. The final savings is therefore \[
+  \text{Savings}(M'_{bloom}) = \sum_{i} (\hat{fp}'_i - \hat{fp}_i) * n_{i,\text{bloom false}},
+\]
+
+and only requires keeping two floats and one integer. Note that in our simulation, for flexibility, we keep a histogram of $n_i$ values at each bloom filter request to avoid needing to predetermine $m'_i$, but in a practical implementation this is unnecessary.
+
+Note that because we can obtain these estimates on a layer-by-layer basis, we can investigate whether reallocating memory from one bloom filter to another, empirically, should reduce I/Os. Validating the results of Monkey \cite{monkey}, in Figure \ref{fig:bloom-realloc} we find that for the baseline allocation, moving bits does improve performance, but for Monkey, it does not, regardless of workload.
+
+\begin{figure}[!htb]
+\begin{center}
+\includegraphics[width=0.33\textwidth]{bloom-moves-disc.png}
+\includegraphics[width=0.33\textwidth]{bloom-moves-zipf.png}
+\end{center}
+\caption{Estimated change in I/Os when moving bits from one bloom filter to another (keeping total bloom filter memory constant). Regardless of workload, changes in I/Os for Monkey are all less than 1, indicating its optimality.}
+\label{fig:bloom-realloc}
+\end{figure}
+
+\textbf{Buffer:}
+
 \subsection{Testing Accuracy and Variance of Statistics}
 
 To confirm that our estimates are reasonable, we ran 250 simulations for three
@@ -544,7 +565,7 @@ Results for basic workloads can be seen in Figure \ref{fig:basicquiv}.
 \includegraphics[width=0.5\textwidth]{robinquiv1.png}
 \includegraphics[width=0.5\textwidth]{eightwenquiv1.png}
 \end{center}
-\caption{Uniform, Round-Robin, and Eighty-Twenty simulation results overlaid with gradient estimates. Following gradients reliably leads to a good configuration, although we tend to undervalue the cache relative to the buffer.}
+\caption{Round-Robin and Eighty-Twenty simulation results overlaid with gradient estimates. Following gradients reliably leads to a good configuration, although we tend to undervalue the cache relative to the buffer.}
 \label{fig:basicquiv}
 \end{figure}
 
