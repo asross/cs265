@@ -1,4 +1,15 @@
 \documentclass{sig-alternate-05-2015}
+\usepackage{float}
+\setcounter{topnumber}{10}
+\def\topfraction{.9}
+\setcounter{bottomnumber}{10}
+\def\bottomfraction{.9}
+\setcounter{totalnumber}{10}
+\def\textfraction{0}
+\def\floatpagefraction{.9}
+\setcounter{dbltopnumber}{10}
+\def\dbltopfraction{.9}
+\def\dblfloatpagefraction{.9}
 
 \begin{document}
 
@@ -36,24 +47,25 @@ rarely known in advance.  There has been recent work \cite{monkey} in
 determining the optimal memory allocation for bloom filters in LSM trees in
 terms of worst-case analysis and with respect to a number of basic workloads,
 but realistic key-value store workloads, which have been analyzed e.g. for
-Facebook \cite{characterizing-memcached}, exhibit enormous complexity with
-respect to time, skewness, and key repeatability.
+Facebook \cite{characterizing-memcached}, exhibit enormous complexities with
+respect to time, skewness, and key repeatability which have not been factored
+in.
 
-Our goal is somewhat ambitious -- we seek to optimize not just bloom filter
-memory allocation but memory allocation across the entire LSM tree; that is,
-given a total amount of memory $M$, we want to choose an amount of cache memory
-$M_{cache}$, buffer/memtable memory $M_{table}$, and bloom filter memory
-$M_{bloom}$ such that $M=M_{cache}+M_{table}+M_{bloom}$ and disk accesses
-across the LSM tree are minimized. Furthmore, we want to perform this
-optimization with respect to a diverse set of workloads that we model as
-stochastic processes.
+Our goal is somewhat ambitious -- building on Monkey \cite{monkey}, we seek to
+optimize not just bloom filter memory allocation but memory allocation across
+the entire LSM tree; that is, given a total amount of memory $M$, we want to
+choose an amount of cache memory $M_{cache}$, buffer/memtable memory
+$M_{table}$, and bloom filter memory $M_{bloom}$ such that
+$M=M_{cache}+M_{table}+M_{bloom}$ and disk accesses across the LSM tree are
+minimized. Furthmore, we want to perform this optimization with respect to a
+diverse set of workloads that we model as stochastic processes.
 
 \section{Stochastic Workloads}
 
 To benchmark our results, rather than generating workloads which are fixed sets
 of queries, we define a diverse set of random workload generating classes.
-Each class is highly configurable and some include hierarchical probabilistic
-modeling.  From them, we randomly regenerate workloads with similar high-level
+Each class is highly configurable and often hierarchical in their probabilistic
+models.  From them, we randomly regenerate workloads with similar high-level
 characteristics but different queries. This strategy does not necessarily
 guarantee realism but helps us avoid "overfitting" to a particular set of
 queries. The workloads we define contain many simple distributions that are
@@ -157,7 +169,7 @@ updates from $\textrm{Mult}(\{p(k_i,t)\})$. Examples can be seen in Figure
   popularity of keys requested multiple times as a function of the number of
   hours since the previous access for a number of real key-value store
   workloads from Facebook. Note the overall trend of exponential decay with a
-  sharply period subsignal on the hour scale (for most workloads).}
+  sharply periodic subsignal on a 24-hour scale (for most workloads).}
 \label{fig:memcached-decay}
 \end{figure}
 
@@ -192,7 +204,7 @@ color scale) changes as we run a full simulation along different allocations of
 8000 bytes (corresponding to the amount of memory needed to store 1000 64-bit
 entries, and assuming a page size of 2048 bytes), with about 50000 queries
 for each simulation. We allocate these 8000 bytes using a 400-byte grid spacing
-along the simplex of possible splits, and test using both Monkey and baseline
+along the simplex of possible splits, and test using both baseline (equal bits-per-entry) and Monkey
 bloom filter allocations \cite{monkey}.
 
 \begin{figure}[!htb]
@@ -463,9 +475,9 @@ savings for a separate tree with 8 bytes of extra memory in the corresponding
 LSM component (against which we ran the same workload). Results can be seen in
 Figure \ref{fig:savings}.
 
-\begin{figure*}[!htb]
+\begin{figure*}[!h]
 \begin{center}
-\includegraphics[width=\textwidth]{all-savings.png}
+\includegraphics[width=0.8\textwidth]{all-savings.png}
 \end{center}
 \caption{Light-footprint statistical estimations of the gradient vs. simulated
 results for cache, bloom filters, and the buffer on three distinct workloads.}
@@ -495,46 +507,61 @@ highest gradient component (signifying that our method suggests moving 8 bytes
 from one component to the other). We can then visually inspect these arrows and
 see if they generally point us to regions of low disk accesses.
 
-\begin{figure}[!htb]
+Results for basic workloads can be seen in Figure \ref{fig:basicquiv}.
+
+\begin{figure}[H]
 \begin{center}
-\includegraphics[width=0.5\textwidth]{eightwenquiv1.png}
+%\includegraphics[width=0.5\textwidth]{uniformquiv1.png}
 \includegraphics[width=0.5\textwidth]{robinquiv1.png}
-\includegraphics[width=0.5\textwidth]{uniformquiv1.png}
+\includegraphics[width=0.5\textwidth]{eightwenquiv1.png}
+\end{center}
+\caption{Uniform, Round-Robin, and Eighty-Twenty simulation results overlaid with gradient estimates. Following gradients reliably leads to a good configuration, although we tend to undervalue the cache relative to the buffer.}
+\label{fig:basicquiv}
+\end{figure}
+
+The optimization landscape is again generally non-convex, but Monkey improves both absolute performance and convexity, and following gradient estimates leads us close to the global minimum (perhaps slightly undervaluing the cache). For Zipf workloads in Figure \ref{fig:zipfquiv}, however, we do reach a cache-centric minimum by following gradients.
+
+\begin{figure}[H]
+\begin{center}
 \includegraphics[width=0.5\textwidth]{zipfquiv1.png}
 \includegraphics[width=0.5\textwidth]{zipfquiv2.png}
 \end{center}
-\caption{Holy guacamole.}
-\label{fig:basicquiv}
+\caption{Zipf simulation results overlaid with gradient estimates for $s=1.1$ (lightly skewed) and $s=1.5$ (highly skewed).}
+\label{fig:zipfquiv}
 \end{figure}
+
+As we increase the Zipf skewness $s$, we observe a qualitative change in both our simulated results and estimated gradients. At low $s$, the best configuration is a mixture of mostly Bloom filter and cache memory with a relatively small buffer, while at high $s$, Bloom filters are less useful and it is better to allocate more memory to the buffer. This effect may be due to the fact for less skewed workloads, we are more likely to request unpopular keys which may be buried deep in the tree (for which we need Bloom filters), but for highly skewed workloads, we obtain better write and read savings by using the buffer as kind of an auxiliary cache.
+
+For Discover-Decay workloads (Figure \ref{fig:discdecquiv}), we observe a similar transition to the Zipf behavior as we vary skewness, but with a shifted balance between the cache and the buffer (because we have much more frequent inserts and updates). Again, we reliably find a good local or global minimum following gradient estimates.
 
 \begin{figure}[!htb]
 \begin{center}
 \includegraphics[width=0.5\textwidth]{discdecquiv1.png}
 \includegraphics[width=0.5\textwidth]{discdecquiv2.png}
 \end{center}
-\caption{Discover-Decay.}
+\caption{Discover-Decay simulation results overlaid with gradient estimates for $\gamma\sim\text{Beta}(100,1)$ (lightly skewed) and $\gamma\sim\text{Beta}(2,1)$ (highly skewed).}
 \label{fig:discdecquiv}
 \end{figure}
 
+Finally, returning to the Periodic Decay workloads, we find that gradients more or less capture the behavior we noted near the beginning of the paper. For lower effective numbers of popular keys (but high temporal locality), we tend to end up allocating most of our memory to the buffer and none to the bloom filters, but as our ``working set'' expands, we are pushed closer to the center of the graph. In the bottom row, the multimodality of the landscape is somewhat visible in the gradient estimates as well.
+
 \begin{figure}[!htb]
 \begin{center}
-\includegraphics[width=0.5\textwidth]{periodquiv1.png}
-\includegraphics[width=0.5\textwidth]{periodquiv2.png}
 \includegraphics[width=0.5\textwidth]{periodquiv3.png}
+\includegraphics[width=0.5\textwidth]{periodquiv2.png}
+\includegraphics[width=0.5\textwidth]{periodquiv1.png}
 \end{center}
 \caption{Periodic Decay.}
 \label{fig:periodquiv}
 \end{figure}
 
-
 \section{Future Work}
+
 There are many additional optimizations we chose not to address for the moment in this problem. For example, what is the optimal time to reallocate memory? In an environment where we assume full flushing of a given layer and the recomputation of all bloom filters for the layers involved in the flush, it seems like this would be an optimal point to reallocate memory locally among the data structures that are being rewritten anyway. However, this leads to only rare opportunities to recompute deeper layers of the LSM tree, and in practice LSM tree layers are not actually flushed in this `all-at-once' fashion. 
 
 Additionally, the equivalent to a stochastic gradient descent learning rate for our problem is the chunk size of memory that we allow to be reallocated at any calculation point. For now, we consider only the reallocation of the smallest available piece of memory. However, in situations where we have a large amount of conviction in the predictions and they show large potential gains, it might make more sense to reallocate a large block of memory at once. In this case, the reallocation strategy requires more thought than merely taking a chunk from the lowest value data structure and giving it to the highest value data structure. Optimally computing what that reallocation strategy would be would likely require a deeper set of statistics, showing a trend of value over the last portion of any of the data structures, rather than only the last key as we have been using.
 
 Building on the above, there are a number of opportunities for storing histograms rather than simple rolling averages of statistics (in particular, we store a histogram of bloom filter accesses at each stage of bloom filter `fullness' to allow us to calculate the average false positive rate for any number of bits after the fact rather than rolling averages of expected false positive rates for a few potential memory allocations). Histograms are a much heavier statistic than a simple number but provide a greater flexibility in the reallocation stage. More work needs to be done to calculate how much added benefit could be achieved in practice from these costlier statistics and to find scenarios in which they might be worthwhile.
-
-\section{Bringing it all together}
 
 \bibliographystyle{abbrv}
 \small
