@@ -671,7 +671,7 @@ In particular, we have shown that the optimal allocation of memory between the
 LSM tree's cache, buffer, and bloom filters strongly depends on the workload,
 although we have independently verified the conclusions of Monkey \cite{monkey}
 that \textit{given} a total amount of bloom filter memory, there is a unique
-optimal allocation of it across bloom filters.
+optimal allocation of it across the bloom filters.
 
 Additionally, we derived formulas for the expected I/O savings if we increase
 the memory in any component of the LSM tree, along with methods of accurately
@@ -728,7 +728,7 @@ describing the ``temporality'' of a workload or the size of its ``working set''
 of keys accessed at any given time. It may be possible that the optimal memory
 allocation of an LSM tree is a simple, deterministic function of statistically
 estimable quantities that correspond to these ad-hoc characterizations. If that
-is the case, then we could do online analysis of the workload once then jump
+is the case, then we could do an online analysis of the workload once then jump
 directly to the optimal configuration.
 
 Finally, we saw in our buffer savings calculation that relative sizes of memory
@@ -739,6 +739,8 @@ the optimal allocations. We should also consider fence pointers.
 
 \paragraph{Acknowledgements}
 Thanks to Niv Dayan for many helpful suggestions and insights.
+
+\vfill\eject
 
 \bibliographystyle{abbrv}
 \bibliography{bibliography}
