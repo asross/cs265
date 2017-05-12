@@ -77,16 +77,23 @@ class Layer(LSMComponent):
   def read_savings(self, dM):
     M = self.size
     kids = self.children()
-    if not kids:
-      return 0
+    if not kids: return 0
     lower_layer_disks = sum([l.accesses for l in kids])
-    lower_layer_gets = sum([l.n_gets for l in kids])
-    if not lower_layer_disks:
-      return 0
+    if not lower_layer_disks: return 0
+
+    if self.index == 0:
+      savings_per_hit = 1
+    else:
+      if self.misses > 0:
+        savings_per_hit = self.misses / self.accesses
+      else:
+        savings_per_hit = 0
+
     old_hits = self.hits
     new_hits = self.hits * (M+dM) / M
     extra_hits = new_hits - old_hits
-    savings = extra_hits * (lower_layer_disks / lower_layer_gets)
+    savings = extra_hits * savings_per_hit
+
     return savings + self.child.read_savings(dM * self.ratio)
 
   @property

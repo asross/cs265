@@ -73,7 +73,7 @@ class LSMulator():
     b1 = ballocs(total_bloom_mem,    self.memtbl.size, self.layer_sizes, bits_per_key=bits_per_key)
     b2 = ballocs(total_bloom_mem+dM, self.memtbl.size, self.layer_sizes, bits_per_key=bits_per_key)
 
-    if not np.allclose(b1, bc):
+    if np.linalg.norm(b1-bc) > 2:
       print('Warning: current bloom allocation is different than', ballocs.__name__)
 
     das1 = sum([l.bloom.est_disk_accesses(m1) for m1, l in zip(b1, self.layers)])

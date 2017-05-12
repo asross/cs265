@@ -131,13 +131,13 @@ def plot_cbm_simplex(trees,ballocs=monkey_assignment,dM=100,quiver=True,paths=Fa
     arrows = arrows_for(savings_pairs(trees, ballocs=ballocs))
     plt.quiver(C[:,0], C[:,1], arrows[:,0], arrows[:,1], color='black', alpha=0.5)
 
+  # experimental minimum
+  plt.scatter(C[i,0], C[i,1], s=50+30*paths, c=kwargs.get('color', 'yellow'))
+
   if paths:
     paths = savings_paths(trees, dM=dM, ballocs=ballocs)
     for path in paths:
-      plt.plot(C[path,0], C[path,1], color='yellow', alpha=0.25, lw=2)
-
-  # experimental minimum
-  plt.scatter(C[i,0], C[i,1], s=50, c=kwargs.get('color', 'yellow'))
+      plt.scatter(C[path[-1],0], C[path[-1],1], c='orange', alpha=0.1, s=30)
 
   # dashed outline
   corners = np.array([[0, 0], [1, 0], [0.5, 0.75**0.5]])
