@@ -284,8 +284,8 @@ the formulation can be generalized to any distribution with an empirical trace.
 \item $M$ total memory \\
 \item $M_c$ memory allocated to cache \\
 \item $M_{buffer}$ memory allocated to buffer\\
-\item $P$ size of the buffer in pages \\
-\item $B$ entries that fit in a disk page \\
+\item $B$ size of the buffer in pages \\
+\item $P$ entries that fit in a disk page \\
 \item $T$ ratio between layers of LSM tree such that \\
 \item $L1 = T * B* P$, $L2 =T^2 * B*P $, and so on,
 \end{itemize}
@@ -405,7 +405,7 @@ Which is just the average cost of a read throughout the tree. Then, to keep
 statistics on how valuable we expect the cache to be, we maintain statistics on
 the average cost of every read performed in the window of interest.
 
-\subsubsection{Bloom Filters}
+\subsubsection{Bloom Filter Gradients}
 
 Because the memory allocation problem is discrete anyway, we consider the value
 of the bloom filters as a finite difference, that is the approximate value of
@@ -428,26 +428,25 @@ allocations $m_j$ and $m_j+1$. Then, to keep statistics on how valuable we
 expect any given bloom filter to be, we maintain statistics on the number of
 times every bloom filter was accessed in the window of interest.
 
-subsubsection{Buffer}
+\subsubsection{Buffer Gradient: Gets}
 
 To estimate the additional value of any marginal memory in the buffer with
-respect to reads, we must make a number of simplifications, as $P$, the number
+respect to reads, we must make a number of simplifications, as $B$, the number
 of pages in the buffer, factors into every term in this equation. Further, the
-interaction between $P$ and most of the terms is not available in closed form,
+interaction between $B$ and most of the terms is not available in closed form,
 in general. Rather, the critical terms $P(L_i)$ we are empirically estimating.
-Then, for reasonably large values of $N$ and $P$, we will assume that the bloom
+Then, for reasonably large values of $N$ and $B$, we will assume that the bloom
 filter false positive rate stays approximately the same, as does the value of
 the cache. Then, we consider only the change in I/Os occurring from the altered
 probability of any given element occurring in any layer as a result of more
-elements being in the memtable. We can provide a simple underestimate
+elements being in the memtable. We can provide a simple estimate
 of this by assuming that any items we add to the memtable would have
-otherwise occurred in L1, and $T^{i}$ times that number of items will be moved up from 
-each layer $L_{i}$.
+otherwise occurred in L1, and in the resulting cascade, $T^{i}$ times that number of items will be moved up into 
+each layer $L_{i}$ from the layer below.
 
 Then, an appropriate estimate of how useful any additional space of memory in
-the memtable is for reads is simply the resulting change in $\sum_{i=2}^L p(L_i) * fp_{i-1} + p(L_1)*1$ (as any element
-at L1 is accessed with a single I/O and no consideration of bloom filter false
-positive rates). To estimate how many additional times L1 would be accessed if
+the memtable is for reads is simply the resulting change in $p(L_i)$ for each layer (that is, the number of hits
+we expect to see on the newly added elements) $* fp_{i}$ for any layer $i\neq0$, as the original cost of accessing that element was $\sum_{j=1}^i fp_{j} + 1$, and the new cost of accessing is $\sum_{j=1}^{i-1} fp_{j} $, the difference between which is just $fp_{i}$. For $i=0$, the buffer itself, the expected savings per hits is exactly 1, as the item will be moved from having an access cost of 1 to 0. To estimate how many additional times L1 would be accessed if
 we instead allocated the final portion of the memtable to L1, we keep
 statistics on how often the final spots of the memtable were accessed in a
 read. In practice, these spots are accessed only very infrequently, as the
@@ -455,24 +454,43 @@ buffer is accessed only a handful of times at this stage before being flushed.
 This statistic might be more helpful on a system with constant compaction
 rather than a full layer flush. For the rest of the layers, we simply assume the same hit rate per key
 as measured over the existing keys on any level and multiply by the number of elements we will be adding to calculate
-the expected accesses to the new keys on each level. We then multiply by the number of bloom filter accesses on the
-above level divided 
+the expected accesses to the new keys on each level. We then multiply by the empirical rate of bloom filter false positives on the level.
 
+\subsubsection{Buffer Gradient: Puts}
 
 For the buffer, we must additionally consider the saved update/insert I/Os.  $$
 \text{write cost} = \textrm{log}_{T} \frac{N}{BP} $$ Taking the derivative with
 respect to $BP$, the number of items in the buffer, we get $\frac{1}{BP}$ In
 discrete terms, this evaluates to $\textrm{log}_{T} \frac{BP}{BP+1}$. 
 
-We consider additionally the fact that I/O savings are lessened by the number
+Unfortunately, this simplification only works if we can assume that memory is being allocated in 
+page-size chunks and that the workload has no duplicates. In practice, the number of I/Os associated
+with reading and writing throughout the merging process is a stepwise function that depends on page size, as reading or
+writing one element from or to a page has the same I/O cost as reading or writing a full page. To simplify our analysis
+of the page size write savings, we consider only a ratio of $T=2$, and we begin by addressing the case wth no 
+duplicates. 
+
+With no duplicates, the final number of elements at any level of the tree is a deterministic function of the number of elements
+inserted as well as the layer sizes. Then considering the empirical number of items inserted into the buffer as well as the 
+size of the original buffer, we can solve for the theoretical final structure of an alternate LSM tree that had a buffer of size 
+$BP + 1$.
+
+Additionally, given the number of elements on any given layer, no duplicates, and an original buffer size $BP+1$, we know the number of times each $T^{i}*(BP+1)$-size chunk on each level will have been read and written given the current fullness of the layer. We can then multiply these numbers of known chunk reads and writes by the ceiling of the size of those possible chunks (which, with ratio $T=2$ will be $T^{i}*(BP+1)$ and $T^{i}*(BP+1)*2$) divided by pagesize, $P$. This gives us a more realistic number in which additions of less than a pagesize of memory are not helpful in I/O savings. 
+
+Comparing the read and write costs of this theoretical tree to the empirical reads and writes accesses of the existing
+tree gives us an expected I/O savings related to updates for the larger tree.
+
+We consider additionally the fact that I/O savings are in general lessened by the number
 of duplicates inserted, as duplicates will not be merged the full length of the
 tree. To take this into account we also keep a statistic for the total number
-of duplicates merged over the window of interest and compute the expected
-number of saved I/Os for an increase in buffer as $\textrm{log}_{T}
-\frac{BP}{BP+1}$ * (number of puts - number of duplicates).  The only
-statistics we need to compute this are the empirical number of update queries
-and the empirical number of duplicates found and removed over the window of
-interest.
+of duplicates merged over the window of interest per layer and use this to calculate the percentage of duplicates removed
+relative to total keys at each level. This factors in in several places. First, when computing the theoretical allocation
+of keys in the final tree, we consider the total number of items that would have come in to the memtable from the empirical
+count and adjust this at each layer by the percentage that are expected to have been removed as duplicates.
+Further, when computing read and write I/Os during merging, we expect that number of items written when the layer is already half full should be decreased by the expected number of duplicates removed among the two sets of keys. Again, the resulting I/O savings will be stepwise in pagesize. In particular, if the original size of the array would have only been slightly into the final page, it will take very few duplicates to reduce the I/O count by 1, whereas if all pages would have been full, it will take a full page's worth of duplicate removals to improve I/Os. The same savings will be experienced again when these items are read to be merged into the lower layer.
+
+The correct way to handle the duplicates requires somewhat more consideration, but the only statistics we are currently using The are the empirical number of update queries and the empirical number of duplicates found and removed on each layer over the window of interest.
+
 
 \section{Database Stochastic Gradient Descent}
 
@@ -572,7 +590,10 @@ There are many additional optimizations we chose not to address for the moment i
 
 Additionally, the equivalent to a stochastic gradient descent learning rate for our problem is the chunk size of memory that we allow to be reallocated at any calculation point. For now, we consider only the reallocation of the smallest available piece of memory. However, in situations where we have a large amount of conviction in the predictions and they show large potential gains, it might make more sense to reallocate a large block of memory at once. In this case, the reallocation strategy requires more thought than merely taking a chunk from the lowest value data structure and giving it to the highest value data structure. Optimally computing what that reallocation strategy would be would likely require a deeper set of statistics, showing a trend of value over the last portion of any of the data structures, rather than only the last key as we have been using.
 
+Further, we see in the buffer savings that relative sizes of memory access can affect the total I/O savings. In the end, it would be important to consider how the difference in sizes between cache lines, pages on disk, and possibly read chunk sizes from flash would affect the optimal sizing of the memory chunks.
+
 Building on the above, there are a number of opportunities for storing histograms rather than simple rolling averages of statistics (in particular, we store a histogram of bloom filter accesses at each stage of bloom filter `fullness' to allow us to calculate the average false positive rate for any number of bits after the fact rather than rolling averages of expected false positive rates for a few potential memory allocations). Histograms are a much heavier statistic than a simple number but provide a greater flexibility in the reallocation stage. More work needs to be done to calculate how much added benefit could be achieved in practice from these costlier statistics and to find scenarios in which they might be worthwhile.
+
 
 \bibliographystyle{abbrv}
 \small
