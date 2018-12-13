@@ -331,7 +331,7 @@ many situations in which increasing either the buffer or the bloom filter will
 reduce I/Os, so we should expect multiple locally optimal allocation strategies
 to exist.
 
-For the complete set of results, please see \ref{fullresults}.
+For the complete set of results, please see Appendix \ref{fullresults}.
 
 \clearpage
 
@@ -372,22 +372,22 @@ the formulation can be generalized to any distribution with an empirical trace.
 \item $E$ size of an entry in bits \\
 \item $M$ total memory \\
 \item $M_c$ memory allocated to cache \\
-\item $M_{buffer}$ memory allocated to buffer\\
-\item $B$ size of the buffer in pages \\
-\item $P$ entries that fit in a disk page \\
+\item $M_b$ memory allocated to buffer\\
+\item $B$ entries that fit in a disk page \\
+\item $P_b$ size of the buffer in pages, i.e. $\frac{M_b}{BE}$ \\
 \item $T$ ratio between layers of LSM tree such that \\
-\item $L1 = T * B* P$, $L2 =T^2 * B*P $, and so on,
+\item $L1 = T * P_b * B$, $L2 =T^2 * P_b*B $, and so on,
 \end{itemize}
 
 \noindent then we can solve for $L$ the total number of layers required to store all the data: \\
-$$B*P * \frac{1-T^L}{1-T} = N$$
-$$L= \lceil \textrm{log}_{T} \left(\frac{N(T-1)}{PB} + 1\right) \rceil$$
+$$P_b*B * \frac{1-T^L}{1-T} = N$$
+$$L= \lceil \textrm{log}_{T} \left(\frac{N(T-1)}{BP_b} + 1\right) \rceil$$
 
 
 The average cost of a write remains the same as for the basic LSM tree case:
 
 $$
-\text{write cost} = \textrm{log}_{T} \frac{N}{BP}
+\text{write cost} = \textrm{log}_{T} \frac{N}{P_bB}
 $$
 
 The average cost of a read must be considered probabilistically over all
@@ -395,21 +395,21 @@ possible locations of the read item, in this case assuming a uniformly random
 distribution of reads:
 
 \begin{itemize}
-\item Probability that read is in buffer $= p(\text{MT}) = \frac{B*P}{N}$
+\item Probability that read is in buffer $= p(\text{MT}) = \frac{P_b*B}{N}$
 \item Probability that read is in cache $= p(\text{cache}) = \frac{M_c/E}{N}$
-\item Probability that read is in L1 but not in cache $= p(L1)$ $$= \frac{B*P * T - \frac{B*P*T}{N-B*P} * M_c/E}{N}$$
+\item Probability that read is in L1 but not in cache $= p(L1)$ $$= \frac{P_b*B * T - \frac{P_b*B*T}{N-P_b*B} * M_c/E}{N}$$
 \end{itemize}
 
-where the numerator is the number of items $B*P*T$ that are in the first layer
+where the numerator is the number of items $P_b*B*T$ that are in the first layer
 minus the proportion of items from that layer that are probabilistically in the
-cache already: $$\frac{B*P*T}{N-B*P} * M_c/E$$ and finally where the $N-B*P$
+cache already: $$\frac{P_b*B*T}{N-P_b*B} * M_c/E$$ and finally where the $N-P_b*B$
 comes from the fact that items already in buffer (L0) are not allowed to
 occupy the cache.
 
 Therefore, given a uniform query distribution, the full expected cost in disk
 reads of a read is
 $$E[C_{\text{uniform}}] = p(\text{MT}) * 0  + p(\text{cache}) * 0 + \sum_{i=1}^L p(L_i) * i$$
-$$=\sum_{i=1}^L \frac{B*P * T^i - \frac{B*P*T^i}{N-B*P} * M_c/E}{N} * i$$
+$$=\sum_{i=1}^L \frac{P_b*B * T^i - \frac{P_b*B*T^i}{N-P_b*B} * M_c/E}{N} * i$$
 
 
 \subsection{Bloom Filters}
@@ -455,16 +455,16 @@ to bloom filters is $M-M_c = \sum_{i=1}^L m_i$ \\ Then the total formula for
 the expected cost of a read in the tree is: 
 
 \begin{multline}
-$$E[c] = \sum_{i=1}^{L} \frac{B*P*T^i - \frac{B*P*T^i}{N-B*P} * M_c/E}{N} \\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right]$$ 
+$$E[c] = \sum_{i=1}^{L} \frac{B*P*T^i - \frac{P_b*B*T^i}{N-P_b*B} * M_c/E}{N} \\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{P_b*B*T^j}}\right) +1 \right]$$ 
 \end{multline}
 
 Whereas with a given percentage of null reads in the workload $p_{null}$:
 
 \begin{multline}
-$$E[c] = (1-p_{null})\sum_{i=1}^{L} \frac{B*P*T^i - \frac{B*P*T^i}{N-B*P} * M_c/E}{N} \\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right] + p_{null}\sum_{j=1}^{L} p(fp_j)$$
+$$E[c] = (1-p_{null})\sum_{i=1}^{L} \frac{P_b*B*T^i - \frac{P_b*B*T^i}{N-P_b*B} * M_c/E}{N} \\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{P_b*B*T^j}}\right) +1 \right] + p_{null}\sum_{j=1}^{L} p(fp_j)$$
 \end{multline}
 \begin{multline}
-$$E[c] = \sum_{i=1}^{L} (1-p_{null})\frac{B*P*T^i - \frac{B*P*T^i}{N-B*P} * M_c/E}{N} \\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right] + p_{null} \cdot p(fp_i) $$
+$$E[c] = \sum_{i=1}^{L} (1-p_{null})\frac{P_b*B*T^i - \frac{P_b*B*T^i}{N-P_b*B} * M_c/E}{N} \\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{P_b*B*T^j}}\right) +1 \right] + p_{null} \cdot p(fp_i) $$
 \end{multline}
 
 \subsection{Gradients of Cost with Bloom Filters - Generalized Distribution}
@@ -480,14 +480,14 @@ layer divided by the total number of (non-null) read queries executed. Then we
 can consider the following simplification:
 
 \begin{multline}
-$$E[c] = \sum_{i=1}^{L} (1-p_{null})\left[p(L_i) - \frac{p(L_i)}{(N - BP)} * M_c/E \right]\\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right] + p_{null} \cdot p(fp_i) $$
+$$E[c] = \sum_{i=1}^{L} (1-p_{null})\left[p(L_i) - \frac{p(L_i)}{(N - P_bB)} * M_c/E \right]\\ \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{P_b*B*T^j}}\right) +1 \right] + p_{null} \cdot p(fp_i) $$
 \end{multline}
 
 Taking the derivative with respect to the number of entries in the cache,
-$M_c/E$, we get 
+$M_c/E$, we get:
 
 $$
-\sum_{i=1}^{L}  -(1-p_{null}) p(L_i)/(N - BP) \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{B*P*T^j}}\right) +1 \right]
+\sum_{i=1}^{L}  -(1-p_{null}) p(L_i)/(N - P_bB) \cdot \left[ \left(\sum_{j=1}^{i-1} (.6185) ^  {\frac{m_j}{P_b*B*T^j}}\right) +1 \right]
 $$
 
 Which is just the average cost of a read throughout the tree. Then, to keep
@@ -503,12 +503,12 @@ In this computation, all terms in the sums drop out except for those concerning
 $m_j$, and we are left with:
 
 \begin{multline}
-$$\sum_{i=k}^{L} (1-p_{null})\left[p(L_i) - \frac{p(L_i)}{(N - BP)} * M_c/E \right] \\ \cdot \left\{ \left[ \left( (.6185) ^  {\frac{m_k+1}{B*P*T^j}}\right) +1 \right] - \left[ \left( (.6185) ^  {\frac{m_k}{B*P*T^j}}\right) +1 \right] \right\} \\+ p_{null}  \left( (.6185) ^  {\frac{m_k+1}{B*P*T^j}} - (.6185) ^  {\frac{m_k}{B*P*T^j}}\right)$$
+$$\sum_{i=k}^{L} (1-p_{null})\left[p(L_i) - \frac{p(L_i)}{(N - P_bB)} * M_c/E \right] \\ \cdot \left\{ \left[ \left( (.6185) ^  {\frac{m_k+1}{P_b*B*T^j}}\right) +1 \right] - \left[ \left( (.6185) ^  {\frac{m_k}{P_b*B*T^j}}\right) +1 \right] \right\} \\+ p_{null}  \left( (.6185) ^  {\frac{m_k+1}{P_b*B*T^j}} - (.6185) ^  {\frac{m_k}{P_b*B*T^j}}\right)$$
 \end{multline}
 
 Rearranging terms, we get:
 \begin{multline}
-$$\sum_{i=k}^{L} \left[(1-p_{null})\left[p(L_i) - \frac{p(L_i)}{(N - BP)} * M_c/E \right] +  p_{null} \right] \\ \cdot \left( (.6185) ^  {\frac{m_k+1}{B*P*T^j}} - (.6185) ^  {\frac{m_k}{B*P*T^j}}\right)$$
+$$\sum_{i=k}^{L} \left[(1-p_{null})\left[p(L_i) - \frac{p(L_i)}{(N - P_bB)} * M_c/E \right] +  p_{null} \right] \\ \cdot \left( (.6185) ^  {\frac{m_k+1}{P_b*B*T^j}} - (.6185) ^  {\frac{m_k}{P_b*B*T^j}}\right)$$
 \end{multline}
 
 Where this is exactly the number of times the given bloom filter is accessed
@@ -520,11 +520,11 @@ times every bloom filter was accessed in the window of interest.
 \subsubsection{Buffer Gradient: Gets}
 
 To estimate the additional value of any marginal memory in the buffer with
-respect to reads, we must make a number of simplifications, as $B$, the number
+respect to reads, we must make a number of simplifications, as $P_b$, the number
 of pages in the buffer, factors into every term in this equation. Further, the
-interaction between $B$ and most of the terms is not available in closed form,
+interaction between $P_b$ and most of the terms is not available in closed form,
 in general. Rather, the critical terms $P(L_i)$ we are empirically estimating.
-Then, for reasonably large values of $N$ and $B$, we will assume that the bloom
+Then, for reasonably large values of $N$ and $P_b$, we will assume that the bloom
 filter false positive rate stays approximately the same, as does the value of
 the cache. Then, we consider only the change in I/Os occurring from the altered
 probability of any given element occurring in any layer as a result of more
@@ -548,9 +548,9 @@ the expected accesses to the new keys on each level. We then multiply by the emp
 \subsubsection{Buffer Gradient: Puts}
 
 For the buffer, we must additionally consider the saved update/insert I/Os.  $$
-\text{write cost} = \textrm{log}_{T} \frac{N}{BP} $$ Taking the derivative with
-respect to $BP$, the number of items in the buffer, we get $\frac{1}{BP}$ In
-discrete terms, this evaluates to $\textrm{log}_{T} \frac{BP}{BP+1}$. 
+\text{write cost} = \textrm{log}_{T} \frac{N}{P_bB} $$ Taking the derivative with
+respect to $P_bB$, the number of items in the buffer, we get $\frac{1}{P_bB}$ In
+discrete terms, this evaluates to $\textrm{log}_{T} \frac{P_bB}{P_bB+1}$. 
 
 Unfortunately, this simplification only works if we can assume that memory is being allocated in 
 page-size chunks and that the workload has no duplicates. In practice, the number of I/Os associated
@@ -559,31 +559,65 @@ writing one element from or to a page has the same I/O cost as reading or writin
 of the page size write savings, we consider only a ratio of $T=2$, and we begin by addressing the case wth no 
 duplicates. 
 
-With no duplicates, the final number of elements at any level of the tree is a deterministic function of the number of elements
-inserted as well as the layer sizes. Then considering the empirical number of items inserted into the buffer as well as the 
-size of the original buffer, we can solve for the theoretical final structure of an alternate LSM tree that had a buffer of size 
-$BP + 1$.
+With no duplicates, the final number of elements at any level of the tree is a
+deterministic function of the number of elements inserted as well as the layer
+sizes. Then considering the empirical number of items inserted into the buffer
+as well as the size of the original buffer, we can solve for the theoretical
+final structure of an alternate LSM tree that had a buffer of size $P_bB + 1$.
 
-Additionally, given the number of elements on any given layer, no duplicates, and an original buffer size $BP+1$, we know the number of times each $T^{i}*(BP+1)$-size chunk on each level will have been read and written given the current fullness of the layer. We can then multiply these numbers of known chunk reads and writes by the ceiling of the size of those possible chunks (which, with ratio $T=2$ will be $T^{i}*(BP+1)$ and $T^{i}*(BP+1)*2$) divided by pagesize, $P$. This gives us a more realistic number in which additions of less than a pagesize of memory are not helpful in I/O savings. 
+Additionally, given the number of elements on any given layer, no duplicates,
+and an original buffer size $P_bB+1$, we know the number of times each
+$T^{i}*(P_bB+1)$-size chunk on each level will have been read and written given
+the current fullness of the layer. We can then multiply these numbers of known
+chunk reads and writes by the ceiling of the size of those possible chunks
+(which, with ratio $T=2$ will be $T^{i}*(P_bB+1)$ and $T^{i}*(P_bB+1)*2$) divided
+by pagesize, $B$. This gives us a more realistic number in which additions of
+less than a pagesize of memory are not helpful in I/O savings. 
 
-Comparing the read and write costs of this theoretical tree to the empirical reads and writes accesses of the existing
-tree gives us an expected I/O savings related to updates for the larger tree.
+Comparing the read and write costs of this theoretical tree to the empirical
+reads and writes accesses of the existing tree gives us an expected I/O savings
+related to updates for the larger tree.
 
-We consider additionally the fact that I/O savings are in general lessened by the number
-of duplicates inserted, as duplicates will not be merged the full length of the
-tree. To take this into account we also keep a statistic for the total number
-of duplicates merged over the window of interest per layer and use this to calculate the percentage of duplicates removed
-relative to total keys at each level. This factors in in several places. First, when computing the theoretical allocation
-of keys in the final tree, we consider the total number of items that would have come in to the buffer from the empirical
-count and adjust this at each layer by the percentage that are expected to have been removed as duplicates.
-Further, when computing read and write I/Os during merging, we expect that number of items written when the layer is already half full should be decreased by the expected number of duplicates removed among the two sets of keys. Again, the resulting I/O savings will be stepwise in pagesize. In particular, if the original size of the array would have only been slightly into the final page, it will take very few duplicates to reduce the I/O count by 1, whereas if all pages would have been full, it will take a full page's worth of duplicate removals to improve I/Os. The same savings will be experienced again when these items are read to be merged into the lower layer.
+We consider additionally the fact that I/O savings are in general lessened by
+the number of duplicates inserted, as duplicates will not be merged the full
+length of the tree. To take this into account we also keep a statistic for the
+total number of duplicates merged over the window of interest per layer and use
+this to calculate the percentage of duplicates removed relative to total keys
+at each level. This factors in in several places. First, when computing the
+theoretical allocation of keys in the final tree, we consider the total number
+of items that would have come in to the buffer from the empirical
+count and adjust this at each layer by the percentage that are expected to have
+been removed as duplicates. Further, when computing read and write I/Os during
+merging, we expect that number of items written when the layer is already half
+full should be decreased by the expected number of duplicates removed among the
+two sets of keys. Again, the resulting I/O savings will be stepwise in
+pagesize. In particular, if the original size of the array would have only been
+slightly into the final page, it will take very few duplicates to reduce the
+I/O count by 1, whereas if all pages would have been full, it will take a full
+page's worth of duplicate removals to improve I/Os. The same savings will be
+experienced again when these items are read to be merged into the lower layer.
 
-The correct way to handle the duplicates requires somewhat more consideration, but the only statistics we are currently using The are the empirical number of update queries and the empirical number of duplicates found and removed on each layer over the window of interest.
+The correct way to handle the duplicates requires somewhat more consideration,
+but the only statistics we are currently using The are the empirical number of
+update queries and the empirical number of duplicates found and removed on each
+layer over the window of interest.
 
 
 \subsection{Estimating Statistics with $O(1)$ Memory}
 
-\textbf{Cache:} to estimate the number of disk accesses we will save by adding $dM$ extra bits of memory to the cache, we let consider $dM$ as a number of extra entries in the cache. That is, we calculate the savings from having $dM/E$ extra cache entries available. As mentioned above, the relevant statistic here is the average cost of a read in the database. To calculate this, we collect statistics on the total number of disk accesses and total number of queries. The expected cost per query is then the number of disk accesses over the window divided by the total number of queries. To approximate the probability of the item being in the cache times the number of queries, we maintain a statistic for the number of times the last cache slot was accessed during the window of interest and make the assumption that the number of hits on the next marginal slot(s) would be approximately the same. Then we can calculate the final expected I/O savings as
+\textbf{Cache:} to estimate the number of disk accesses we will save by adding
+$dM$ extra bits of memory to the cache, we let consider $dM$ as a number of
+extra entries in the cache. That is, we calculate the savings from having
+$dM/E$ extra cache entries available. As mentioned above, the relevant
+statistic here is the average cost of a read in the database. To calculate
+this, we collect statistics on the total number of disk accesses and total
+number of queries. The expected cost per query is then the number of disk
+accesses over the window divided by the total number of queries. To approximate
+the probability of the item being in the cache times the number of queries, we
+maintain a statistic for the number of times the last cache slot was accessed
+during the window of interest and make the assumption that the number of hits
+on the next marginal slot(s) would be approximately the same. Then we can
+calculate the final expected I/O savings as
 
 $$dM/E * E[hits] * E[cost/query]$$
 
@@ -624,6 +658,7 @@ occurred throughout the process for a second tree with buffer size + $dM$, calcu
 $$cost_{tree} - cost_{tree+dM}$$
 
 When we consider duplicates, the estimate becomes much more noisy. To consider the effect of duplicates on reducing the total number of pages read and written during the merging process, we reduce the number of entries that pass through each layer of our theoretical larger tree by the percentage of duplicates removed at each layer, calculated as $$\frac{duplicates\_removed_{i}}{total\_entries_{i}}$$
+
 This then changes the final layer structure of the estimated tree. We also consider that duplicates should reduce the total number of entries written and then read after two segments are merged together. Then for those read and write components that occur on an already half-filled layer, we reduce the number of elements by multiplying by $$1 - \frac{duplicates\_removed_{i}}{total\_entries_{i}}$$
 This will reduce the total I/Os by number of page reads it makes unnecessary. With this adjusted cost for the larger tree, we again calculate the expected saved I/Os as the estimated I/Os of the hypothetical larger tree subtracted from the empirical or theoretical I/Os of the existing tree.
 
