@@ -94,11 +94,11 @@ intuition on tradeoffs becomes complicated. Knowing the exact parameters or the
 exact tipping points in which certain strategies become better or worse is yet
 harder. At each turn, we encounter more "it depends" scenarios.
 
-\subsection{A solution: Stochastic Gradient Descent}
+\subsection{A Solution: Stochastic Gradient Descent}
 
-We see a path forward by combining machine learning techniques with design
-continuum knowledge to create solutions that approach the optimal design for a
-broader set of design decisions. The problem, to us, seems akin to training a
+We see a path forward by combining machine learning ideas with design continuum
+knowledge to create solutions that approach the optimal design for a broader
+set of design decisions. The problem, to us, seems analogous to training a
 machine learning model:
 
 \textbf{The cost function} that we're minimizing is the I/O access cost,
@@ -112,8 +112,7 @@ filter size.
 
 \textbf{The parameter space} is only a subset of 3D space, because total memory
 is constrained. For example, if we wanted to increase both the cache size and
-the buffer size we would have to decrease the bloom filter size. This
-parameter space is described by a 2-simplex.
+the buffer size we would have to decrease the bloom filter size.
 
 \textbf{The gradient functions} are the estimated I/O savings if we increase
 the memory by N bits for any single component. Following the gradients, one
